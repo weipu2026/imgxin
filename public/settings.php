@@ -61,6 +61,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
         $patch['rate_per_hour'] = max(1, min(2000, (int)($_POST['rate_per_hour'] ?? 60)));
 
+        // 磁盘配额保护线（GB）：上传前要求磁盘剩余不少于这个值，0 = 不限制
+        $patch['total_quota_gb'] = max(0, min(2048, (int)($_POST['total_quota_gb'] ?? 0)));
+
         $wlRaw = (string)($_POST['referer_whitelist'] ?? '');
         $wl = [];
         foreach (preg_split('/[\s,，;；]+/u', $wlRaw) ?: [] as $item) {
@@ -316,6 +319,11 @@ $warnMem = $memBytes > 0 && $memBytes < 256 * 1024 * 1024;
         <div class="field">
           <label for="ratePerHour">每 IP 每小时上传上限</label>
           <input type="number" id="ratePerHour" name="rate_per_hour" min="1" max="2000" value="<?= (int)$s['rate_per_hour'] ?>">
+        </div>
+        <div class="field">
+          <label for="totalQuotaGb">磁盘配额保护线（GB）</label>
+          <input type="number" id="totalQuotaGb" name="total_quota_gb" min="0" max="2048" step="1" value="<?= (int)$s['total_quota_gb'] ?>">
+          <div class="desc">上传前要求磁盘剩余空间不少于这个值，低于就直接拒绝（0 = 不限制）。磁盘快满时宁可拒传，也别让转码写到一半失败留下一堆半成品。</div>
         </div>
         <div class="field">
           <label for="refererWhitelist">防盗链白名单</label>

@@ -265,6 +265,10 @@ input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var
 .alert-success { border-color: #c7ead9; background: var(--success-soft); color: #106c4a; }
 .alert-warning { border-color: #f3dfb2; background: var(--warning-soft); color: var(--warning); }
 .alert-info { border-color: #d8e3ff; background: var(--accent-soft); color: #315bc4; }
+.detail-list { margin-top: 12px; }
+.detail-list h3 { font-size: 13px; color: var(--text-soft, #666); margin: 10px 0 6px; }
+.detail-list ul { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.9; }
+.detail-list code { background: #f0f2f6; padding: 1px 6px; border-radius: 5px; font-size: 12px; }
 .tag {
   display: inline-flex;
   align-items: center;

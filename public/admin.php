@@ -26,6 +26,12 @@ Store::purgeExpired(max(1, (int)Config::get('trash_keep_days', 30)));
 
 $cap    = Store::capacity();
 
+// 一致性检查是只读操作，用 GET 参数触发即可，不必走 CSRF
+$consistency = null;
+if (($_GET['consistency'] ?? '') === '1') {
+    $consistency = Store::consistencyCheck();
+}
+
 $siteFilter = (string)($_GET['s'] ?? 'all');
 if ($siteFilter !== 'all' && !Sites::exists($siteFilter)) {
     $siteFilter = 'all';
@@ -103,6 +109,55 @@ $siteName = static function (string $slug) use ($sites): string {
       <a class="btn btn-sm btn-soft spacer" href="trash.php">去回收站处理</a>
     </div>
   <?php endif; ?>
+
+  <?php if ($cap['disk_total'] !== null && $cap['disk_free'] !== null && $cap['disk_free'] / max(1, (int)$cap['disk_total']) < 0.10): ?>
+    <div class="alert alert-error">
+      <b>磁盘剩余空间不足 10%</b>（<?= Http::esc(Http::bytes((int)$cap['disk_free'])) ?> / <?= Http::esc(Http::bytes((int)$cap['disk_total'])) ?>），
+      上传可能失败，请尽快清理图床或扩容磁盘。
+    </div>
+  <?php endif; ?>
+
+  <section class="card flush" aria-label="存储一致性检查">
+    <div class="trash-toolbar">
+      <p>比对 storage 里的图片文件与元数据是否一一对应。手动覆盖部署或异常中断可能产生孤儿记录，只报告不自动删。</p>
+      <div class="row">
+        <a class="btn" href="?consistency=1">立即检查</a>
+        <?php if ($consistency !== null): ?>
+          <a class="btn" href="admin.php">清除结果</a>
+        <?php endif; ?>
+      </div>
+    </div>
+
+    <?php if ($consistency !== null): ?>
+      <?php if ($consistency['orphan_count'] === 0): ?>
+        <div class="alert alert-success">一切正常：文件与元数据一一对应。</div>
+      <?php else: ?>
+        <div class="alert alert-warning">
+          发现 <b><?= (int)$consistency['orphan_count'] ?></b> 条不一致记录（孤儿文件 <?= count($consistency['orphan_files']) ?> 个，孤儿元数据 <?= count($consistency['orphan_meta']) ?> 条）。
+        </div>
+        <?php if ($consistency['orphan_files'] !== []): ?>
+          <div class="detail-list">
+            <h3>有文件、没元数据</h3>
+            <ul>
+              <?php foreach ($consistency['orphan_files'] as $o): ?>
+                <li><code><?= Http::esc($o['site']) ?>/<?= Http::esc($o['month']) ?>/<?= Http::esc($o['name']) ?></code> · <?= Http::esc(Http::bytes((int)$o['bytes'])) ?></li>
+              <?php endforeach; ?>
+            </ul>
+          </div>
+        <?php endif; ?>
+        <?php if ($consistency['orphan_meta'] !== []): ?>
+          <div class="detail-list">
+            <h3>有元数据、没文件</h3>
+            <ul>
+              <?php foreach ($consistency['orphan_meta'] as $o): ?>
+                <li><code><?= Http::esc($o['site']) ?>/<?= Http::esc($o['month']) ?>/<?= Http::esc($o['id']) ?></code> · <?= Http::esc(Http::bytes((int)$o['bytes'])) ?></li>
+              <?php endforeach; ?>
+            </ul>
+          </div>
+        <?php endif; ?>
+      <?php endif; ?>
+    <?php endif; ?>
+  </section>
 
   <section class="card sites-card">
     <div class="card-head sites-head">

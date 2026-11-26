@@ -36,6 +36,8 @@ final class Config
             'max_edge'            => 2560,
             // 每 IP 每小时上传张数
             'rate_per_hour'       => 60,
+            // 磁盘配额保护线（GB）：上传前要求磁盘剩余不少于这个值，0 = 不限制
+            'total_quota_gb'      => 0,
             // 防盗链白名单（用于生成 nginx 片段 + 参考配置 EdgeOne）
             'referer_whitelist'   => ['*.40404.cn'],
             // 是否放行空 Referer：直接打开、微信/QQ、部分 App 内嵌都不发 Referer，建议开

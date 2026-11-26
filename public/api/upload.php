@@ -124,6 +124,16 @@ if ($width * $height > $maxPixels) {
     Http::fail('图片太大（' . $width . '×' . $height . '），上限 ' . number_format($maxPixels) . ' 像素');
 }
 
+// ---------- 磁盘配额预检 ----------
+// 在转码前就拦住，避免"转完才发现磁盘不够"。配额为 0 表示不限制。
+$quotaGb = (int)Config::get('total_quota_gb', 0);
+if ($quotaGb > 0) {
+    $free = @disk_free_space((string)Config::base('storage_dir'));
+    if ($free !== false && $free < $quotaGb * 1024 * 1024 * 1024) {
+        Http::fail('磁盘剩余空间不足（低于 ' . $quotaGb . ' GB），无法上传，请清理图床或调低配额');
+    }
+}
+
 // ---------- 压缩参数 ----------
 $out = strtolower((string)Config::get('output', 'webp'));
 if (!in_array($out, ['webp', 'avif', 'png', 'original'], true)) {

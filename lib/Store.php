@@ -569,6 +569,76 @@ final class Store
     /**
      * 容量面板数据：总占用、各站点占用、本月新增、磁盘余量
      */
+    /**
+     * 一致性检查：找出「有文件没元数据」和「有元数据没文件」的记录。
+     * 只报告不自动删，避免误伤；返回数量 + 前若干条明细供后台展示。
+     */
+    public static function consistencyCheck(int $limit = 100): array
+    {
+        $orphanFiles = [];
+        $orphanMeta  = [];
+
+        // 1) 扫描 storage/{site}/{YYYYMM}/{id}.{ext}，元数据缺失即孤儿文件
+        if (is_dir(self::root())) {
+            foreach (glob(self::root() . '/*/*/*') ?: [] as $file) {
+                if (!is_file($file)) {
+                    continue;
+                }
+                $site  = basename(dirname(dirname($file)));
+                $month = basename(dirname($file));
+                $id    = pathinfo(basename($file), PATHINFO_FILENAME);
+                if (!self::validSite($site) || !self::validMonth($month) || !self::validId($id)) {
+                    continue;
+                }
+                if (!is_file(self::metaFile($site, $month, $id))) {
+                    $orphanFiles[] = [
+                        'site'  => $site,
+                        'month' => $month,
+                        'name'  => basename($file),
+                        'bytes' => (int)@filesize($file),
+                    ];
+                    if (count($orphanFiles) >= $limit) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 2) 扫描 data/meta/{site}/{YYYYMM}/{id}.json，文件缺失即孤儿元数据
+        $metaRoot = (string)Config::base('data_dir') . '/meta';
+        if (is_dir($metaRoot)) {
+            foreach (glob($metaRoot . '/*/*/*.json') ?: [] as $file) {
+                if (!is_file($file)) {
+                    continue;
+                }
+                $site  = basename(dirname(dirname($file)));
+                $month = basename(dirname($file));
+                $id    = pathinfo(basename($file), PATHINFO_FILENAME);
+                if (!self::validSite($site) || !self::validMonth($month) || !self::validId($id)) {
+                    continue;
+                }
+                if (!glob(self::monthDir($site, $month) . '/' . $id . '.*')) {
+                    $orphanMeta[] = [
+                        'site'  => $site,
+                        'month' => $month,
+                        'id'    => $id,
+                        'bytes' => (int)@filesize($file),
+                    ];
+                    if (count($orphanMeta) >= $limit) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        return [
+            'ok'            => true,
+            'orphan_files'  => $orphanFiles,
+            'orphan_meta'   => $orphanMeta,
+            'orphan_count'  => count($orphanFiles) + count($orphanMeta),
+        ];
+    }
+
     public static function capacity(): array
     {
         $perSite = [];
@@ -607,7 +677,8 @@ final class Store
             $count += $n;
         }
 
-        $diskFree = is_dir(self::root()) ? @disk_free_space(self::root()) : false;
+        $diskFree  = is_dir(self::root()) ? @disk_free_space(self::root()) : false;
+        $diskTotal = $diskFree === false ? null : (float)@disk_total_space(self::root());
         $trash = self::trashUsage();
 
         return [
@@ -616,6 +687,7 @@ final class Store
             'this_month'   => $thisMonth,
             'sites'        => $perSite,
             'disk_free'    => $diskFree === false ? null : (float)$diskFree,
+            'disk_total'   => $diskTotal === false ? null : (float)$diskTotal,
             'trash_bytes'  => $trash['bytes'],
             'trash_count'  => $trash['count'],
         ];
