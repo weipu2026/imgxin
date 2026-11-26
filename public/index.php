@@ -87,6 +87,7 @@ $boot   = [
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>图床 · imgxin</title>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body class="<?= $logged ? 'page-upload' : 'login-page' ?>">

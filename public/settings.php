@@ -187,6 +187,7 @@ $warnMem = $memBytes > 0 && $memBytes < 256 * 1024 * 1024;
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>设置 · imgxin</title>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body class="page-settings">
