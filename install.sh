@@ -93,18 +93,46 @@ find storage -type f -exec chmod 644 {} \; 2>/dev/null || true
 chmod -R 750 data trash 2>/dev/null || true
 info "权限设置完成"
 
-# ---------- 生成 nginx 配置 ----------
+# ---------- nginx 配置 ----------
 DOMAIN=""
-if [ -f /etc/nginx/sites-available/ ] || [ -d /etc/nginx/conf.d ]; then
-    prompt "请输入你的域名（如 img.example.com，回车跳过）："
-    read -r DOMAIN
-    if [ -n "$DOMAIN" ]; then
-        NGINX_CONF="/etc/nginx/conf.d/imgxin.conf"
-        if [ -d /etc/nginx/sites-available/ ]; then
-            NGINX_CONF="/etc/nginx/sites-available/imginx"
-        fi
-        if [ -w "$(dirname "$NGINX_CONF")" ] || [ "$EUID" -eq 0 ]; then
-            cat > "$NGINX_CONF" <<NGINX
+NGINX_CONF=""
+
+if [ -d /www/server ]; then
+    # ---- 宝塔面板：直接在面板网站配置里改 ----
+    echo
+    prompt "检测到宝塔面板，请在面板里完成 nginx 配置："
+    echo
+    echo "  1. 打开宝塔 → 网站 → 找到你的图床站点 → 设置 → 配置文件"
+    echo "  2. 找到 root 那行，改为指向 public 子目录，例如："
+    echo "     root /www/wwwroot/你的域名/public;"
+    echo "  3. 在 location / 之前添加以下内容："
+    echo
+    cat <<NGINX
+    location ^~ /i/ {
+        alias ${APP_DIR}/storage/;
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000, immutable";
+        access_log off;
+    }
+NGINX
+    echo
+    echo "  4. 确认 server { 下面有："
+    echo "     client_max_body_size 25m;"
+    echo "  5. 保存后点「重载配置」"
+    echo
+    warn "宝塔用户不需要写 /etc/nginx/，直接在面板里改配置即可。"
+else
+    # ---- 原生 nginx ----
+    if [ -f /etc/nginx/sites-available/ ] || [ -d /etc/nginx/conf.d ]; then
+        prompt "请输入你的域名（如 img.example.com，回车跳过）："
+        read -r DOMAIN
+        if [ -n "$DOMAIN" ]; then
+            NGINX_CONF="/etc/nginx/conf.d/imgxin.conf"
+            if [ -d /etc/nginx/sites-available/ ]; then
+                NGINX_CONF="/etc/nginx/sites-available/imginx"
+            fi
+            if [ -w "$(dirname "$NGINX_CONF")" ] || [ "$EUID" -eq 0 ]; then
+                cat > "$NGINX_CONF" <<NGINX
 server {
     listen 80;
     server_name ${DOMAIN};
@@ -112,7 +140,7 @@ server {
     index index.php;
     client_max_body_size 25m;
 
-    location /i/ {
+    location ^~ /i/ {
         alias ${APP_DIR}/storage/;
         expires 30d;
         add_header Cache-Control "public, max-age=2592000, immutable";
@@ -131,20 +159,20 @@ server {
     }
 }
 NGINX
-            info "nginx 配置已写入：$NGINX_CONF"
-            info "请执行：nginx -t && systemctl reload nginx"
-        else
-            warn "没有权限写 nginx 配置，请手动添加（见下方模板）"
+                info "nginx 配置已写入：$NGINX_CONF"
+                info "请执行：nginx -t && systemctl reload nginx"
+            else
+                warn "没有权限写 nginx 配置（见下方模板）"
+            fi
         fi
     fi
-fi
 
-# ---------- 输出 nginx 模板（权限不足或跳过时） ----------
-if [ -z "${NGINX_CONF:-}" ]; then
-    echo
-    warn "请手动把以下内容添加到 nginx 配置（宝塔：网站 → 设置 → 配置文件）："
-    echo
-    cat <<NGINX
+    # 权限不足或跳过时输出模板
+    if [ -z "$NGINX_CONF" ]; then
+        echo
+        warn "请手动把以下内容添加到 nginx 配置："
+        echo
+        cat <<NGINX
 server {
     listen 80;
     server_name ${DOMAIN:-your-domain.com};
@@ -152,8 +180,7 @@ server {
     index index.php;
     client_max_body_size 25m;
 
-    # 图片直链：nginx 直接吐静态文件，不经 PHP
-    location /i/ {
+    location ^~ /i/ {
         alias ${APP_DIR}/storage/;
         expires 30d;
         add_header Cache-Control "public, max-age=2592000, immutable";
@@ -172,7 +199,8 @@ server {
     }
 }
 NGINX
-    echo
+        echo
+    fi
 fi
 
 # ---------- 完成 ----------
