@@ -15,11 +15,11 @@
 | 项目 | 要求 |
 | --- | --- |
 | 操作系统 | Linux，推荐 Debian / Ubuntu |
-| Web 服务 | Nginx + PHP-FPM |
-| PHP | **8.1 及以上**，推荐 8.4 / 8.5 |
+| 部署方式 | **Docker（推荐）** 或 Nginx + PHP-FPM 手动部署 |
+| PHP | **8.1 及以上**，推荐 8.4 / 8.5（Docker 镜像已内置） |
 | 数据库 | 不需要 |
 | 磁盘 | 至少数百 MB，图片占用取决于上传量 |
-| 权限 | PHP 可写 `storage/`、`data/`、`trash/` |
+| 权限 | PHP 可写 `storage/`、`data/`、`trash/`（Docker 自动处理） |
 
 ### PHP 扩展
 
@@ -102,14 +102,65 @@ imgxin/
 │  └─ tmp/            # 转码临时文件
 ├─ nginx-img.conf     # 需要粘贴到宝塔的片段
 ├─ dev-server.php     # 本地预览用，线上不需要
+├─ Dockerfile         # Docker 镜像构建
+├─ docker-compose.yml # Docker 一键启动
+├─ docker/            # Docker 专用 nginx + supervisor 配置
 └─ README.md
+```
+
+---
+
+## Docker 一键部署（推荐）
+
+不想手动配 nginx、PHP 扩展和目录权限的话，用 Docker 最省事。目录创建、权限、nginx 配置、PHP 扩展全在镜像里，升级就是拉新镜像重启，数据卷不动。
+
+### 首次部署
+
+```bash
+# 1. 安装 Docker（如果还没装）
+curl -fsSL https://get.docker.com | sh
+
+# 2. 克隆或解压项目到目录
+git clone https://github.com/weipu2026/imgxin.git
+cd imgxin
+
+# 3. 构建并启动（首次会自动编译 PHP 扩展，约 3-5 分钟）
+docker compose up -d --build
+
+# 4. 浏览器访问完成密码初始化
+#    http://服务器IP:8080
+```
+
+启动后 nginx 监听 8080 端口，浏览器打开完成首次密码设置，然后进设置页填直链域名和防盗链白名单。
+
+### 升级
+
+```bash
+git pull                          # 拉最新代码
+docker compose up -d --build       # 重建镜像并重启
+```
+
+数据在 volume 里（`./data`、`./storage`、`./trash`），重建镜像不会丢。应用内置版本迁移系统，重启后自动比对代码版本和数据版本，有新迁移就自动执行。
+
+### 反向代理到 80 端口
+
+如果前面还有一层 nginx/CDN（比如 EdgeOne），把 8080 端口代理到容器即可，容器内 nginx 监听 80：
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
 ```
 
 ---
 
 ## 安装步骤（宝塔 / Debian）
 
-下面以域名 `img.40404.cn`、站点目录 `/www/wwwroot/img.40404.cn` 为例。实际部署时替换成自己的域名和路径。
+不想用 Docker 的话，按下面手动步骤来。下面以域名 `img.40404.cn`、站点目录 `/www/wwwroot/img.40404.cn` 为例。实际部署时替换成自己的域名和路径。
 
 ### 1. 上传程序
 

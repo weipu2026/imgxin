@@ -1,0 +1,6 @@
+data/
+storage/
+trash/
+.git/
+.gitignore
+dev-server.php

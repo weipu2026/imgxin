@@ -1,0 +1,13 @@
+services:
+  imgxin:
+    build: .
+    container_name: imgxin
+    ports:
+      - "8080:80"
+    volumes:
+      # 数据持久化：重建镜像不会丢
+      - ./data:/var/www/imgxin/data
+      - ./storage:/var/www/imgxin/storage
+      - ./trash:/var/www/imgxin/trash
+    restart: unless-stopped
+    # 首次启动后浏览器访问 http://服务器IP:8080 完成密码初始化
