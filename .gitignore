@@ -1,0 +1,16 @@
+# 本地运行数据：设置、密码哈希、Token、元数据、限流计数
+/data/*
+!/data/.gitkeep
+
+# 图片实体与回收站，不进入代码仓库
+/storage/*
+!/storage/.gitkeep
+/trash/*
+!/trash/.gitkeep
+
+# 临时文件与编辑器配置
+*.log
+*.tmp
+.DS_Store
+.idea/
+.vscode
