@@ -44,6 +44,11 @@ final class Sites
         }
 
         if ($list === []) {
+            // 文件在却读不出站点（写坏/被截断/是空数组）：先把现场另存一份再回落，
+            // 否则这里一写，原来的站点名就彻底没了，只剩磁盘目录可以靠「一键登记」找回。
+            if (is_file($file)) {
+                @copy($file, $file . '.broken-' . date('Ymd-His'));
+            }
             $list[] = ['slug' => 'default', 'name' => '默认站点', 'created_at' => date('Y-m-d H:i:s')];
             self::save($list);
         }
@@ -171,7 +176,12 @@ final class Sites
         $trashMetaFiles = is_dir($trashMetaDir) ? (glob($trashMetaDir . '/*/*') ?: []) : [];
         $trashMetaCount = count(array_filter($trashMetaFiles, static fn($f) => is_file($f)));
 
-        if ($count + $trashCount + $trashMetaCount > 0) {
+        // 图片库为空但元数据还在（文件丢了/被手动挪走）同样算有数据，否则删站点后这批元数据永远列不出来
+        $metaDir = (string)Config::base('data_dir') . '/meta/' . $slug;
+        $metaFiles = is_dir($metaDir) ? (glob($metaDir . '/*/*') ?: []) : [];
+        $metaCount = count(array_filter($metaFiles, static fn($f) => is_file($f)));
+
+        if ($count + $trashCount + $trashMetaCount + $metaCount > 0) {
             return 'not_empty';
         }
 
@@ -191,6 +201,9 @@ final class Sites
         }
         if (is_dir($trashMetaDir)) {
             @rmdir($trashMetaDir);
+        }
+        if (is_dir($metaDir ?? '')) {
+            @rmdir($metaDir);
         }
 
         return 'ok';
@@ -262,8 +275,9 @@ final class Sites
         }
 
         $name = trim($name);
+        // 名称上限 30 字，标识很长时放不下后缀，直接用标识当名称
         if ($name === '') {
-            $name = $slug . '（已恢复）';
+            $name = mb_strlen($slug) > 20 ? $slug : $slug . '（已恢复）';
         }
         if (mb_strlen($name) > 30) {
             $name = mb_substr($name, 0, 30);

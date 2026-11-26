@@ -97,7 +97,8 @@ final class Upgrade
         }
 
         try {
-            $applied = [];
+            // 和历史已执行记录合并，不能只写本次的，否则以后回滚再升级会丢掉旧记录
+            $applied = self::appliedIds();
             foreach ($pending as $step) {
                 ($step['run'])();
                 $applied[] = $step['id'];

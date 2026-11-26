@@ -123,13 +123,13 @@ NGINX
     warn "宝塔用户不需要写 /etc/nginx/，直接在面板里改配置即可。"
 else
     # ---- 原生 nginx ----
-    if [ -f /etc/nginx/sites-available/ ] || [ -d /etc/nginx/conf.d ]; then
+    if [ -d /etc/nginx/sites-available/ ] || [ -d /etc/nginx/conf.d ]; then
         prompt "请输入你的域名（如 img.example.com，回车跳过）："
         read -r DOMAIN
         if [ -n "$DOMAIN" ]; then
             NGINX_CONF="/etc/nginx/conf.d/imgxin.conf"
             if [ -d /etc/nginx/sites-available/ ]; then
-                NGINX_CONF="/etc/nginx/sites-available/imginx"
+                NGINX_CONF="/etc/nginx/sites-available/imgxin.conf"
             fi
             if [ -w "$(dirname "$NGINX_CONF")" ] || [ "$EUID" -eq 0 ]; then
                 cat > "$NGINX_CONF" <<NGINX
@@ -155,11 +155,18 @@ server {
         fastcgi_pass unix:/run/php/php${PHP_VER%%.*}-fpm.sock;
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
         include fastcgi_params;
-        fastcgi_read_timeout 60;
+        fastcgi_read_timeout 300;
     }
 }
 NGINX
                 info "nginx 配置已写入：$NGINX_CONF"
+                # Debian/Ubuntu 的 sites-available 需要 symlink 到 sites-enabled 才会生效
+                if [ -d /etc/nginx/sites-enabled/ ] && [ ! -e "/etc/nginx/sites-enabled/$(basename "$NGINX_CONF")" ]; then
+                    ln -s "$NGINX_CONF" "/etc/nginx/sites-enabled/$(basename "$NGINX_CONF")" 2>/dev/null \
+                        && info "已启用站点：sites-enabled/$(basename "$NGINX_CONF")" \
+                        || warn "请手动启用：ln -s $NGINX_CONF /etc/nginx/sites-enabled/"
+                fi
+                # 转码大图最长可到 120 秒，fastcgi 超时要留够，否则前端会先收到 504
                 info "请执行：nginx -t && systemctl reload nginx"
             else
                 warn "没有权限写 nginx 配置（见下方模板）"
@@ -195,7 +202,7 @@ server {
         fastcgi_pass unix:/run/php/php${PHP_VER%%.*}-fpm.sock;
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
         include fastcgi_params;
-        fastcgi_read_timeout 60;
+        fastcgi_read_timeout 300;
     }
 }
 NGINX

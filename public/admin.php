@@ -180,13 +180,15 @@ $siteName = static function (string $slug) use ($sites): string {
       </div>
     <?php endif; ?>
     <div class="site-list">
+      <div class="site-cols" aria-hidden="true">
+        <span>站点</span><span>标识</span><span>图片数量</span><span>总体积</span><span>默认</span><span>操作</span>
+      </div>
       <?php foreach ($cap['sites'] as $s): ?>
-        <?php $pct = $cap['total_bytes'] > 0 ? round($s['bytes'] / $cap['total_bytes'] * 100) : 0; ?>
         <div class="site-row">
           <div class="site-name" title="<?= Http::esc($s['name']) ?>"><?= Http::esc($s['name']) ?></div>
           <div class="site-slug">/<?= Http::esc($s['slug']) ?></div>
-          <div class="progress"><i style="width:<?= max(1, $pct) ?>%"></i></div>
-          <div class="site-usage"><?= (int)$s['count'] ?> 张 · <?= Http::esc(Http::bytes((int)$s['bytes'])) ?></div>
+          <div class="site-count"><?= (int)$s['count'] ?> 张</div>
+          <div class="site-size"><?= Http::esc(Http::bytes((int)$s['bytes'])) ?></div>
           <?php if ($s['slug'] === $defaultSlug): ?>
             <span class="site-default-tag" title="上传页默认选中的站点">默认</span>
           <?php else: ?>

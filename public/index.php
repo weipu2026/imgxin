@@ -6,14 +6,22 @@ require dirname(__DIR__) . '/lib/bootstrap.php';
 Auth::start();
 
 $configured = Auth::configured();
+// 已有安装但密码配置丢了（settings.json 被删）时，绝不能重新打开初始化入口，否则谁先访问谁就能设密码。
+$setupBlocked = !$configured && (is_file(Upgrade::file()) || is_file(Sites::file()));
 $logged     = Auth::user();
 $error      = '';
 $notice     = '';
 
+// 登录/退出后跳回当前路径。只认以单个 / 开头的站内路径，挡掉 //evil.com 这种协议相对地址。
+$selfUrl = static function (): string {
+    $uri = (string)strtok((string)($_SERVER['REQUEST_URI'] ?? '/'), '?');
+    return '/' . ltrim($uri, '/');
+};
+
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $do = (string)($_POST['do'] ?? '');
 
-    if ($do === 'setup' && !$configured) {
+    if ($do === 'setup' && !$configured && !$setupBlocked) {
         if (!Auth::csrfOk(isset($_POST['csrf']) && is_string($_POST['csrf']) ? $_POST['csrf'] : null)) {
             $error = '会话已过期，请刷新页面重试';
         } else {
@@ -28,7 +36,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 try {
                     Config::save(['admin_hash' => password_hash($password, PASSWORD_DEFAULT)]);
                     Auth::login();
-                    header('Location: ' . strtok((string)($_SERVER['REQUEST_URI'] ?? '/'), '?'));
+                    header('Location: ' . $selfUrl());
                     exit;
                 } catch (Throwable $e) {
                     $error = $e->getMessage();
@@ -45,11 +53,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         } elseif (Rate::blocked($rateKey, $maxFail, $lockSecs)) {
             $error = '密码错误次数过多，已锁定 15 分钟，请稍后再试';
         } elseif (!$configured) {
-            $error = '还没有设置管理员密码，请刷新页面完成初始化';
+            $error = $setupBlocked
+                ? '管理员密码配置丢失，初始化入口已锁定。请在服务器 config.php 的 admin_hash 里填入密码哈希后刷新'
+                : '还没有设置管理员密码，请刷新页面完成初始化';
         } elseif (Auth::check((string)($_POST['password'] ?? ''))) {
             Rate::reset($rateKey);
             Auth::login();
-            header('Location: ' . strtok((string)($_SERVER['REQUEST_URI'] ?? '/'), '?'));
+            header('Location: ' . $selfUrl());
             exit;
         } else {
             $n = Rate::fail($rateKey, $lockSecs);
@@ -62,7 +72,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         if (Auth::csrfOk(isset($_POST['csrf']) && is_string($_POST['csrf']) ? $_POST['csrf'] : null)) {
             Auth::logout();
         }
-        header('Location: ' . strtok((string)($_SERVER['REQUEST_URI'] ?? '/'), '?'));
+        header('Location: ' . $selfUrl());
         exit;
     }
 }
@@ -109,27 +119,33 @@ $boot   = [
         </span>
       </div>
 
-      <?php if (!$configured): ?>
+      <?php if ($setupBlocked): ?>
+        <div class="alert alert-error" role="alert">
+          检测到已有安装，但管理员密码配置丢失，初始化入口已锁定，避免被他人抢占。<br>
+          请在服务器上执行 <code>php -r "echo password_hash('你的密码', PASSWORD_DEFAULT), PHP_EOL;"</code>，
+          把输出的整串填进 <code>config.php</code> 的 <code>admin_hash</code>，刷新后用该密码登录。
+        </div>
+      <?php elseif (!$configured): ?>
         <div class="alert alert-info">首次运行，请设置管理员密码。设置完成后，初始化入口会自动关闭。</div>
       <?php endif; ?>
 
       <?php if ($error !== ''): ?><div class="alert alert-error" role="alert"><?= Http::esc($error) ?></div><?php endif; ?>
 
       <form method="post" autocomplete="off">
-        <input type="hidden" name="do" value="<?= $configured ? 'login' : 'setup' ?>">
+        <input type="hidden" name="do" value="<?= ($configured || $setupBlocked) ? 'login' : 'setup' ?>">
         <input type="hidden" name="csrf" value="<?= Http::esc($csrf) ?>">
         <div class="pw">
-          <input type="password" id="pw" name="password" placeholder="<?= $configured ? '管理员密码' : '设置管理员密码，至少 8 位' ?>" autocomplete="<?= $configured ? 'current-password' : 'new-password' ?>" required autofocus>
+          <input type="password" id="pw" name="password" placeholder="<?= $configured || $setupBlocked ? '管理员密码' : '设置管理员密码，至少 8 位' ?>" autocomplete="<?= $configured || $setupBlocked ? 'current-password' : 'new-password' ?>" required autofocus>
           <button type="button" class="eye" id="eye" aria-label="显示或隐藏密码" title="显示 / 隐藏">
             <svg viewBox="0 0 24 24"><path d="M12 5c-5 0-9 4.5-10 7 1 2.5 5 7 10 7s9-4.5 10-7c-1-2.5-5-7-10-7Zm0 11.2a4.2 4.2 0 1 1 0-8.4 4.2 4.2 0 0 1 0 8.4Z"/></svg>
           </button>
         </div>
-        <?php if (!$configured): ?>
+        <?php if (!$configured && !$setupBlocked): ?>
           <div class="pw">
             <input type="password" id="pw2" name="confirm_password" placeholder="再输入一次确认" autocomplete="new-password" required>
           </div>
         <?php endif; ?>
-        <button class="btn btn-primary btn-login"><?= $configured ? '进入后台' : '设置密码并进入' ?></button>
+        <button class="btn btn-primary btn-login"><?= ($configured || $setupBlocked) ? '进入后台' : '设置密码并进入' ?></button>
       </form>
 
       <div class="login-foot">

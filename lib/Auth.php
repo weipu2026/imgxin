@@ -68,7 +68,10 @@ final class Auth
         $_SESSION = [];
         if (ini_get('session.use_cookies')) {
             $p = session_get_cookie_params();
-            setcookie(session_name(), '', time() - 42000, $p['path'], $p['domain'], (bool)$p['secure'], (bool)$p['httponly']);
+            setcookie(session_name(), '', time() - 42000, [
+                'path' => $p['path'], 'domain' => $p['domain'],
+                'secure' => (bool)$p['secure'], 'httponly' => (bool)$p['httponly'], 'samesite' => 'Lax',
+            ]);
         }
         session_destroy();
     }

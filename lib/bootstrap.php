@@ -13,6 +13,8 @@ ini_set('log_errors', '1');
 header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data:; connect-src 'self' https: http:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: strict-origin-when-cross-origin');
+// 后台页面带登录态，不许浏览器或中间层缓存；接口和缩略图会各自覆盖这条
+header('Cache-Control: no-store, max-age=0');
 
 require_once IMGXIN_ROOT . '/lib/Config.php';
 require_once IMGXIN_ROOT . '/lib/Sites.php';
