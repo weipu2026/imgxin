@@ -571,11 +571,50 @@ rsync -av --delete /www/wwwroot/img.40404.cn/{storage,trash,data} /backup/imgxin
 
 ---
 
-## 升级步骤
+## 版本与一键升级
+
+程序使用两个版本号：
+
+- **代码版本**：写在 `lib/Version.php` 的 `CODE_VERSION`，随新代码发布。
+- **数据版本**：写在 `data/version.json`，由升级迁移实际推进。
+
+覆盖代码后，打开后台「设置 → 版本与升级」，如果有待执行迁移，会出现「一键升级」按钮。点击后：
+
+1. 自动备份 `data/settings.json` 到 `data/backups/`。
+2. 按顺序执行尚未完成的数据迁移。
+3. 更新 `data/version.json`。
+4. 返回设置页并显示升级结果。
+
+### 推荐升级流程
 
 1. 备份 `storage/`、`trash/`、`data/` 和 `config.php`。
-2. 上传新版程序文件，覆盖 `public/`、`lib/`、`dev-server.php`、`README.md` 等代码文件。
-3. **不要覆盖**现有的 `config.php`、`storage/`、`trash/`、`data/`，除非明确需要重置。
-4. 检查目录权限和 PHP 扩展。
-5. 执行 `nginx -t && systemctl reload nginx`。
-6. 登录后台，确认「运行环境」中的转码后端和上传限制正常。
+2. 上传新版代码，覆盖：
+   - `public/`
+   - `lib/`
+   - `dev-server.php`
+   - `README.md`
+   - `nginx-img.conf`（如无配置变化可不覆盖）
+3. `config.php` 如果改过固定项，不要直接覆盖；先备份，再只合并新版新增的键。
+4. **不要覆盖** `storage/`、`trash/`、`data/`，图片、设置和元数据都保存在这里。
+5. 登录后台，在「版本与升级」点击「一键升级」。
+6. 执行 `nginx -t && systemctl reload nginx`。
+7. 在「运行环境」确认转码后端、上传限制和目录权限正常。
+
+如果代码版本高于数据版本但按钮没有出现，通常说明当前代码没有新增迁移步骤，属于纯代码更新，直接使用即可。
+
+### 降级
+
+降级覆盖旧代码后，数据版本可能高于代码版本。程序不会自动执行反向迁移，避免来回切换损坏数据。请先备份 `data/`，再恢复对应版本的代码。
+
+### 新增数据迁移
+
+以后需要修改设置结构或清理元数据时：
+
+1. 把 `lib/Version.php` 的 `CODE_VERSION` 改成新版本。
+2. 在 `lib/Upgrade.php` 的 `steps()` 增加一个迁移：
+   - `version`：新版本号。
+   - `id`：稳定的迁移标识。
+   - `description`：后台显示说明。
+   - `run`：迁移函数，必须幂等。
+3. 迁移只能调整 `data/` 内的数据，不要移动或删除 `storage/`、`trash/`。
+4. 升级前为关键数据保留备份；迁移函数失败时版本号不会推进。

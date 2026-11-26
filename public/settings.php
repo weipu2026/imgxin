@@ -23,6 +23,14 @@ $error  = '';
 $notice = '';
 $passChanged = false;
 
+$upgradeNotice = (string)($_SESSION['imgxin_upgrade'] ?? '');
+unset($_SESSION['imgxin_upgrade']);
+$pendingUpgrade = Upgrade::pending();
+$downgrade = Upgrade::isDowngrade();
+if ($upgradeNotice !== '') {
+    $notice = $upgradeNotice;
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $token = isset($_POST['csrf']) && is_string($_POST['csrf']) ? $_POST['csrf'] : null;
     if (!Auth::csrfOk($token)) {
@@ -199,6 +207,39 @@ $warnMem = $memBytes > 0 && $memBytes < 256 * 1024 * 1024;
   <?php if ($notice !== ''): ?>
     <div class="alert alert-success" role="status"><?= Http::esc($notice) ?></div>
   <?php endif; ?>
+
+  <section class="card settings-card">
+    <div class="card-head">
+      <h2>版本与升级</h2>
+      <span class="hint">覆盖代码后一键执行数据迁移</span>
+    </div>
+    <div class="card-body">
+      <div class="form-grid">
+        <div class="field">
+          <label>代码版本</label>
+          <div class="env-value"><?= Http::esc(Upgrade::codeVersion()) ?></div>
+        </div>
+        <div class="field">
+          <label>数据版本</label>
+          <div class="env-value"><?= Http::esc(Upgrade::storedVersion() === '0.0.0' ? '尚未初始化' : Upgrade::storedVersion()) ?></div>
+        </div>
+      </div>
+
+      <?php if ($pendingUpgrade): ?>
+        <div class="alert alert-info">
+          检测到 <?= count($pendingUpgrade) ?> 项待执行迁移，覆盖新代码后点击升级即可。
+          <form method="post" action="upgrade.php" class="upgrade-form">
+            <input type="hidden" name="csrf" value="<?= Http::esc($csrf) ?>">
+            <button type="submit" class="btn btn-primary">一键升级</button>
+          </form>
+        </div>
+      <?php elseif ($downgrade): ?>
+        <div class="alert alert-error">当前数据版本高于代码版本，可能是降级覆盖。请先备份 data/，再恢复对应版本代码。</div>
+      <?php else: ?>
+        <div class="desc">当前已是最新版本。升级时只需覆盖 public/、lib/、config.php（如未改过固定项）和 README，再回到这里点升级。</div>
+      <?php endif; ?>
+    </div>
+  </section>
 
   <form method="post">
     <input type="hidden" name="csrf" value="<?= Http::esc($csrf) ?>">

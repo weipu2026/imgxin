@@ -23,6 +23,11 @@ $navItems = [
     <?php foreach ($navItems as $key => $item): ?>
       <a href="<?= Http::esc($item[1]) ?>"<?= $active === $key ? ' class="active" aria-current="page"' : '' ?>><?= Http::esc($item[0]) ?></a>
     <?php endforeach; ?>
+    <?php if (Upgrade::pendingCount() > 0): ?>
+      <a href="settings.php" class="nav-upgrade" title="有新版本可升级">升级</a>
+    <?php elseif (Upgrade::isDowngrade()): ?>
+      <a href="settings.php" class="nav-warn" title="当前数据版本高于代码版本">降级</a>
+    <?php endif; ?>
     <span class="nav-divider" aria-hidden="true"></span>
     <form method="post">
       <input type="hidden" name="do" value="logout">

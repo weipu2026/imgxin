@@ -21,11 +21,13 @@ require_once IMGXIN_ROOT . '/lib/Http.php';
 require_once IMGXIN_ROOT . '/lib/Rate.php';
 require_once IMGXIN_ROOT . '/lib/Imager.php';
 require_once IMGXIN_ROOT . '/lib/Store.php';
+require_once IMGXIN_ROOT . '/lib/Version.php';
+require_once IMGXIN_ROOT . '/lib/Upgrade.php';
 
 $__conf = require IMGXIN_ROOT . '/config.php';
 Config::boot(is_array($__conf) ? $__conf : []);
 
-foreach ([Config::base('storage_dir'), Config::base('data_dir'), Config::base('trash_dir'), Config::base('data_dir') . '/tmp', Config::base('data_dir') . '/meta', Config::base('data_dir') . '/trash', Config::base('data_dir') . '/rate'] as $__dir) {
+foreach ([Config::base('storage_dir'), Config::base('data_dir'), Config::base('trash_dir'), Config::base('data_dir') . '/tmp', Config::base('data_dir') . '/meta', Config::base('data_dir') . '/trash', Config::base('data_dir') . '/rate', Config::base('data_dir') . '/backups'] as $__dir) {
     if (is_string($__dir) && $__dir !== '' && !is_dir($__dir)) {
         @mkdir($__dir, 0755, true);
     }
