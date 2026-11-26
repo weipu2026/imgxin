@@ -1,6 +1,11 @@
 <?php
-/** @var string $active upload|admin|trash|settings */
+/**
+ * 顶部导航栏
+ * @var string $active  当前页面标识：upload|admin|trash|settings
+ */
 $active = $active ?? '';
+// CSRF 显式从会话读取，不依赖父页面变量穿透
+$csrf = Auth::csrf();
 $navItems = [
     'upload' => ['上传', './'],
     'admin' => ['图片管理', 'admin.php'],

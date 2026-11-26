@@ -39,7 +39,7 @@ final class Config
             // 磁盘配额保护线（GB）：上传前要求磁盘剩余不少于这个值，0 = 不限制
             'total_quota_gb'      => 0,
             // 防盗链白名单（用于生成 nginx 片段 + 参考配置 EdgeOne）
-            'referer_whitelist'   => ['*.40404.cn'],
+            'referer_whitelist'   => [],
             // 是否放行空 Referer：直接打开、微信/QQ、部分 App 内嵌都不发 Referer，建议开
             'allow_empty_referer' => true,
             // 管理员密码哈希：由后台「修改密码」写入；留空则回退用 config.php 里的 admin_hash
@@ -89,7 +89,10 @@ final class Config
         $current = self::all();
         $merged  = array_merge($current, array_intersect_key($patch, $current));
         $file    = self::settingsFile();
-        $tmp     = $file . '.tmp';
+        $tmp     = tempnam(dirname($file), '.settings-');
+        if ($tmp === false) {
+            throw new RuntimeException('写入设置失败，无法创建临时文件');
+        }
 
         $json = json_encode($merged, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
         if ($json === false || @file_put_contents($tmp, $json, LOCK_EX) === false) {

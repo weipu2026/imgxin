@@ -8,6 +8,9 @@ final class Imager
 {
     public const MAX_FRAMES = 300;
 
+    /** 单张图片转码的最大执行时间（秒），防止异常图片拖死 worker */
+    private const CONVERT_TIMEOUT = 120;
+
     public static function available(): bool
     {
         return self::backend() !== '';
@@ -78,6 +81,12 @@ final class Imager
         $im->setResourceLimit(Imagick::RESOURCETYPE_MEMORY, 256 * 1024 * 1024);
         $im->setResourceLimit(Imagick::RESOURCETYPE_MAP, 512 * 1024 * 1024);
         $im->setResourceLimit(Imagick::RESOURCETYPE_DISK, 1024 * 1024 * 1024);
+        // Imagick 6.7.8+ 支持时间资源限制；不支持的版本静默跳过
+        if (defined('Imagick::RESOURCETYPE_TIME')) {
+            $im->setResourceLimit(Imagick::RESOURCETYPE_TIME, self::CONVERT_TIMEOUT);
+        }
+        // 设置执行时间上限，防止异常图片拖死 PHP worker
+        $deadline = time() + self::CONVERT_TIMEOUT;
 
         try {
             $im->readImage($src);
@@ -133,6 +142,10 @@ final class Imager
         if ($maxEdge > 0) {
             $im->setFirstIterator();
             do {
+                if (time() > $deadline) {
+                    $im->clear();
+                    throw new RuntimeException('图片转码超时（超过 ' . self::CONVERT_TIMEOUT . ' 秒），请缩小图片后再试');
+                }
                 $w = $im->getImageWidth();
                 $h = $im->getImageHeight();
                 if ($w > 0 && $h > 0 && max($w, $h) > $maxEdge) {
@@ -168,6 +181,10 @@ final class Imager
             // coalesce 后遗留的质量值，导致同一张 GIF 各帧画质不一致。
             $im->setFirstIterator();
             do {
+                if (time() > $deadline) {
+                    $im->clear();
+                    throw new RuntimeException('图片转码超时，请缩小图片后再试');
+                }
                 // 无损只给单帧透明图用；动图走有损，否则体积可能比原图还大
                 if ($hasAlpha && $losslessAlpha && $frames === 1) {
                     $im->setOption('webp:lossless', 'true');
@@ -181,12 +198,20 @@ final class Imager
         } elseif ($target === 'AVIF') {
             $im->setFirstIterator();
             do {
+                if (time() > $deadline) {
+                    $im->clear();
+                    throw new RuntimeException('图片转码超时，请缩小图片后再试');
+                }
                 $im->setImageCompressionQuality($quality);
             } while ($im->nextImage());
             $im->setFirstIterator();
         } elseif ($target === 'PNG') {
             $im->setFirstIterator();
             do {
+                if (time() > $deadline) {
+                    $im->clear();
+                    throw new RuntimeException('图片转码超时，请缩小图片后再试');
+                }
                 $im->setImageCompression(Imagick::COMPRESSION_ZIP);
                 $im->setImageCompressionQuality(9);
             } while ($im->nextImage());

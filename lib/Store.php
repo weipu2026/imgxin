@@ -195,6 +195,26 @@ final class Store
             @mkdir($dir, 0755, true);
         }
 
+        // 先读原始元数据，构造回收站元数据
+        $meta = self::meta($site, $month, $id) ?? [];
+        $meta['id']         = $id;
+        $meta['site']       = $site;
+        $meta['deleted_at'] = date('Y-m-d H:i:s');
+
+        // 先写回收站元数据（原子写入），确保崩溃后至少有元数据可追踪
+        $metaDir = dirname(self::trashMetaFile($site, $month, $id));
+        if (!is_dir($metaDir)) {
+            @mkdir($metaDir, 0755, true);
+        }
+        $trashMetaFile = self::trashMetaFile($site, $month, $id);
+        $tmpMeta = $trashMetaFile . '.tmp.' . getmypid();
+        $json = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+        if (@file_put_contents($tmpMeta, $json) === false || !@rename($tmpMeta, $trashMetaFile)) {
+            @unlink($tmpMeta);
+            return false;
+        }
+
+        // 元数据就位后再移动实体文件
         $moved = false;
         foreach (glob(self::monthDir($site, $month) . '/' . $id . '.*') ?: [] as $file) {
             if (!is_file($file)) {
@@ -210,22 +230,10 @@ final class Store
         }
 
         if (!$moved) {
+            // 文件没移成功，回滚：删掉刚写入的回收站元数据
+            @unlink($trashMetaFile);
             return false;
         }
-
-        $meta = self::meta($site, $month, $id) ?? [];
-        $meta['id']         = $id;
-        $meta['site']       = $site;
-        $meta['deleted_at'] = date('Y-m-d H:i:s');
-
-        $metaDir = dirname(self::trashMetaFile($site, $month, $id));
-        if (!is_dir($metaDir)) {
-            @mkdir($metaDir, 0755, true);
-        }
-        @file_put_contents(
-            self::trashMetaFile($site, $month, $id),
-            json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT)
-        );
 
         @unlink(self::metaFile($site, $month, $id));
 
@@ -258,6 +266,13 @@ final class Store
             @mkdir($dir, 0755, true);
         }
 
+        // 先写回正式元数据（从回收站元数据恢复），确保崩溃后至少有元数据
+        $metaFile = self::trashMetaFile($site, $month, $id);
+        $meta = is_file($metaFile) ? (json_decode((string)@file_get_contents($metaFile), true) ?: []) : [];
+        unset($meta['deleted_at']);
+        self::saveMeta($site, $month, $id, $meta);
+
+        // 元数据就位后再移回实体文件
         $ok = false;
         foreach ($files as $file) {
             if (!is_file($file)) {
@@ -276,13 +291,11 @@ final class Store
         }
 
         if (!$ok) {
+            // 文件没移回来，回滚：删掉刚写入的正式元数据
+            @unlink(self::metaFile($site, $month, $id));
             return 'missing';
         }
 
-        $metaFile = self::trashMetaFile($site, $month, $id);
-        $meta = is_file($metaFile) ? (json_decode((string)@file_get_contents($metaFile), true) ?: []) : [];
-        unset($meta['deleted_at']);
-        self::saveMeta($site, $month, $id, $meta);
         @unlink($metaFile);
 
         self::removeEmptyDir(dirname($metaFile));
@@ -359,16 +372,23 @@ final class Store
      * 某个（或全部站点的）某月图片列表；$month 传 'all' 时跨月收集（配合搜索）
      * @return array{items:array,total:int,page:int,pages:int}
      */
+    /** listMonth 扫描硬上限：防止超大量图片时把所有文件都加载进内存导致 OOM */
+    private const MAX_SCAN = 10000;
+
     public static function listMonth(?string $site, string $month, int $page = 1, int $perPage = 40, string $keyword = ''): array
     {
         if ($month !== 'all' && !self::validMonth($month)) {
-            return ['items' => [], 'total' => 0, 'page' => 1, 'pages' => 1];
+            return ['items' => [], 'total' => 0, 'page' => 1, 'pages' => 1, 'truncated' => false];
         }
 
         $sites = $site !== null ? [$site] : array_column(Sites::all(), 'slug');
         $items = [];
+        $truncated = false;
 
         foreach ($sites as $s) {
+            if ($truncated) {
+                break;
+            }
             if (!self::validSite((string)$s)) {
                 continue;
             }
@@ -376,7 +396,14 @@ final class Store
             $months = $month === 'all' ? self::months((string)$s) : [$month];
 
             foreach ($months as $m) {
+                if ($truncated) {
+                    break;
+                }
                 foreach (glob(self::monthDir((string)$s, (string)$m) . '/*') ?: [] as $file) {
+                    if (count($items) >= self::MAX_SCAN) {
+                        $truncated = true;
+                        break;
+                    }
                     if (!is_file($file)) {
                         continue;
                     }
@@ -423,10 +450,11 @@ final class Store
         $page  = max(1, min($page, $pages));
 
         return [
-            'items' => array_slice($items, ($page - 1) * $perPage, $perPage),
-            'total' => $total,
-            'page'  => $page,
-            'pages' => $pages,
+            'items'     => array_slice($items, ($page - 1) * $perPage, $perPage),
+            'total'     => $total,
+            'page'      => $page,
+            'pages'     => $pages,
+            'truncated' => $truncated,
         ];
     }
 
@@ -527,9 +555,10 @@ final class Store
      * 导出用：一次取该筛选下的全部链接（不分页）
      * @return array<int,array{url:string,markdown:string,html:string,name:string,month:string,site:string}>
      */
+    /** 导出直链列表。受 MAX_SCAN 硬上限保护，最多返回 5000 条 */
     public static function links(?string $site, string $month, string $keyword = ''): array
     {
-        $list = self::listMonth($site, $month, 1, 1000000, $keyword);
+        $list = self::listMonth($site, $month, 1, 5000, $keyword);
         $out = [];
         foreach ($list['items'] as $it) {
             $out[] = [

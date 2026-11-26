@@ -3,7 +3,7 @@
 # imgxin 一键安装脚本
 #
 # 用法：
-#   1. 把 imgxin 目录上传到网站根目录（比如 /www/wwwroot/img.40404.cn/）
+#   1. 把 imgxin 目录上传到网站根目录（比如 /www/wwwroot/img.example.com/）
 #   2. cd 到该目录
 #   3. bash install.sh
 #   4. 按提示完成 nginx 配置
@@ -96,7 +96,7 @@ info "权限设置完成"
 # ---------- 生成 nginx 配置 ----------
 DOMAIN=""
 if [ -f /etc/nginx/sites-available/ ] || [ -d /etc/nginx/conf.d ]; then
-    prompt "请输入你的域名（如 img.40404.cn，回车跳过）："
+    prompt "请输入你的域名（如 img.example.com，回车跳过）："
     read -r DOMAIN
     if [ -n "$DOMAIN" ]; then
         NGINX_CONF="/etc/nginx/conf.d/imgxin.conf"

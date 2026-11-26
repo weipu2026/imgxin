@@ -114,10 +114,10 @@ imgxin/
 
 ### 1. 上传程序
 
-把 `imgxin` 里的内容上传到网站根目录（比如 `/www/wwwroot/img.40404.cn/`），结构是：
+把 `imgxin` 里的内容上传到网站根目录（比如 `/www/wwwroot/img.example.com/`），结构是：
 
 ```text
-img.40404.cn/
+img.example.com/
 ├─ public/          # 站点入口（nginx root 指向这里）
 ├─ lib/             # 核心类
 ├─ storage/         # 图片实体（脚本自动创建）
@@ -131,7 +131,7 @@ img.40404.cn/
 ### 2. 运行安装脚本
 
 ```bash
-cd /www/wwwroot/img.40404.cn
+cd /www/wwwroot/img.example.com
 sudo bash install.sh
 ```
 
@@ -146,7 +146,7 @@ sudo bash install.sh
 
 ### 3. 浏览器初始化
 
-打开 `https://img.40404.cn/`，首次访问进入密码初始化页面：
+打开 `https://img.example.com/`，首次访问进入密码初始化页面：
 
 1. 输入管理员密码（至少 8 位）
 2. 确认密码
@@ -203,13 +203,13 @@ client_max_body_size 25m;
 
 # 图片直链：nginx 直接吐静态文件，不经 PHP
 location ^~ /i/ {
-    alias /www/wwwroot/img.40404.cn/storage/;
+    alias /www/wwwroot/img.example.com/storage/;
     autoindex off;
     add_header Cache-Control "public, max-age=31536000, immutable";
     add_header X-Content-Type-Options nosniff;
 
     # 防盗链：none 放行空 Referer（微信/QQ 直接打开不发 Referer）
-    valid_referers none blocked server_names *.40404.cn;
+    valid_referers none blocked server_names *.example.com;
     if ($invalid_referer) { return 403; }
 }
 
@@ -243,7 +243,7 @@ chmod 640 config.php
 上传一张图，确认直链可打开：
 
 ```bash
-curl -I "https://img.40404.cn/i/default/202611/xxxxxxxxxxxxxxxx.webp"
+curl -I "https://img.example.com/i/default/202611/xxxxxxxxxxxxxxxx.webp"
 ```
 
 正常应返回 `HTTP/2 200` + `content-type: image/webp`。设置页底部的「直链自检」也会真实请求一张现有图片。
@@ -252,10 +252,10 @@ curl -I "https://img.40404.cn/i/default/202611/xxxxxxxxxxxxxxxx.webp"
 
 ## 接入 EdgeOne
 
-- 加速域名使用 `img.40404.cn`，或另开 `cdn.40404.cn` 并把 `base_url` 改成它。
+- 加速域名使用 `img.example.com`，或另开 `cdn.example.com` 并把 `base_url` 改成它。
 - 缓存规则：`/i/` 前缀，缓存 TTL 30 天以上，**忽略查询参数**。
-- 回源协议 HTTPS，回源 Host 填写 `img.40404.cn`。
-- 防盗链：在 EdgeOne 的访问管控里配置 Referer 白名单 `*.40404.cn`，并放行空 Referer。
+- 回源协议 HTTPS，回源 Host 填写 `img.example.com`。
+- 防盗链：在 EdgeOne 的访问管控里配置 Referer 白名单 `*.example.com`，并放行空 Referer。
 - 不要开启「图片压缩 / 格式转换」类功能，避免边缘二次转码影响画质。
 - 加速区域包含中国大陆时，域名必须完成 ICP 备案；源站是腾讯云机器时还要完成腾讯云接入备案。
 - 换 `base_url` 后，新生成的链接会使用新域名；旧直链本身不会自动改变。
@@ -326,7 +326,7 @@ curl -I "https://img.40404.cn/i/default/202611/xxxxxxxxxxxxxxxx.webp"
 设置页生成 Token 后，可以不带登录态调用上传接口：
 
 ```bash
-curl -X POST "https://img.40404.cn/api/upload.php" \
+curl -X POST "https://img.example.com/api/upload.php" \
   -H "X-API-Token: 你的Token" \
   -F "file=@photo.jpg" \
   -F "site=cipba" \
@@ -457,7 +457,7 @@ EdgeOne 边缘缓存可能仍然存在。提交 URL 或目录刷新，或等待 
 增量备份示例：
 
 ```bash
-rsync -av --delete /www/wwwroot/img.40404.cn/{storage,trash,data} /backup/imgxin/
+rsync -av --delete /www/wwwroot/img.example.com/{storage,trash,data} /backup/imgxin/
 ```
 
 `data/tmp` 和 `data/rate` 是临时数据，备不备都可以。`config.php` 如做过固定配置修改，也建议单独备份。

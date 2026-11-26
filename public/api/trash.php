@@ -81,13 +81,30 @@ if ($action === 'purge_expired') {
 }
 
 if ($action === 'purge_all') {
+    // 循环拉取直到回收站真正清空或碰到连续失败，避免原先一次最多只清 1000 条的截断
     $n = 0;
-    foreach (Store::listTrash(null, 1, 1000)['items'] as $it) {
-        if (Store::purge($it['site'], $it['month'], $it['id'])) {
-            $n++;
+    $failures = 0;
+    $maxFailures = 20; // 连续 20 次删除失败就停止，防止异常情况下死循环
+    while (true) {
+        $batch = Store::listTrash(null, 1, 100)['items'];
+        if ($batch === []) {
+            break;
+        }
+        $progressed = false;
+        foreach ($batch as $it) {
+            if (Store::purge($it['site'], $it['month'], $it['id'])) {
+                $n++;
+                $progressed = true;
+                $failures = 0;
+            } else {
+                $failures++;
+            }
+        }
+        if (!$progressed || $failures >= $maxFailures) {
+            break;
         }
     }
-    Http::json(['ok' => true, 'purged' => $n]);
+    Http::json(['ok' => true, 'purged' => $n, 'stopped_early' => $failures >= $maxFailures]);
 }
 
 Http::fail('未知操作');

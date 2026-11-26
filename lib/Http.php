@@ -60,14 +60,20 @@ final class Http
         if ($n < 1024 * 1024) {
             return round($n / 1024, 1) . ' KB';
         }
-        return round($n / 1024 / 1024, 2) . ' MB';
+        if ($n < 1024 * 1024 * 1024) {
+            return round($n / 1024 / 1024, 2) . ' MB';
+        }
+        if ($n < 1024 * 1024 * 1024 * 1024) {
+            return round($n / 1024 / 1024 / 1024, 2) . ' GB';
+        }
+        return round($n / 1024 / 1024 / 1024 / 1024, 2) . ' TB';
     }
 
     /** 把 php.ini 的 128M / 2G / -1 之类的值换算成字节；-1 表示不限制。 */
     public static function iniBytes(string $value): int
     {
         $value = trim($value);
-        if ($value === '' || $value === '-1') {
+        if ($value === '' || (float)$value < 0) {
             return -1;
         }
         $unit = strtolower(substr($value, -1));

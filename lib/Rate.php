@@ -93,7 +93,10 @@ final class Rate
 
         $hits = [];
         try {
-            flock($fh, LOCK_EX);
+            if (!flock($fh, LOCK_EX)) {
+                // 拿不到锁就跳过本次限流，不把正常业务卡死
+                return [];
+            }
             $raw = stream_get_contents($fh);
             $hits = is_string($raw) && $raw !== '' ? (json_decode($raw, true) ?: []) : [];
             if (!is_array($hits)) {

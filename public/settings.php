@@ -40,7 +40,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
         $base = trim((string)($_POST['base_url'] ?? ''));
         if ($base !== '' && !preg_match('#^https?://[A-Za-z0-9\.\-:\[\]]+(/[^\s]*)?$#', $base)) {
-            $error = '域名格式不对，示例：https://img.40404.cn';
+            $error = '域名格式不对，示例：https://img.example.com';
         }
         $patch['base_url'] = rtrim($base, '/');
 
@@ -256,7 +256,7 @@ $warnMem = $memBytes > 0 && $memBytes < 256 * 1024 * 1024;
       <div class="card-body">
         <div class="field">
           <label for="baseUrl">直链域名（base_url）</label>
-          <input type="text" id="baseUrl" name="base_url" value="<?= Http::esc((string)$s['base_url']) ?>" placeholder="https://img.40404.cn">
+          <input type="text" id="baseUrl" name="base_url" value="<?= Http::esc((string)$s['base_url']) ?>" placeholder="https://img.example.com">
           <div class="desc">留空则自动用当前访问域名。将来换域名、或接上 CDN 后想改成加速域名，只改这里即可，已生成的图片链接会跟着变。</div>
         </div>
 
@@ -327,7 +327,7 @@ $warnMem = $memBytes > 0 && $memBytes < 256 * 1024 * 1024;
         </div>
         <div class="field">
           <label for="refererWhitelist">防盗链白名单</label>
-          <textarea id="refererWhitelist" name="referer_whitelist" placeholder="*.40404.cn"><?= Http::esc(implode("\n", array_map('strval', (array)$s['referer_whitelist']))) ?></textarea>
+          <textarea id="refererWhitelist" name="referer_whitelist" placeholder="*.example.com&#10;example.com"><?= Http::esc(implode("\n", array_map('strval', (array)$s['referer_whitelist']))) ?></textarea>
           <div class="desc">一行一个，支持 *.example.com 这种通配。只填域名，不要带 http://。</div>
         </div>
       </div>
@@ -365,7 +365,7 @@ $warnMem = $memBytes > 0 && $memBytes < 256 * 1024 * 1024;
           <label for="clrTok">清空 Token（关闭免登录上传）</label>
         </div>
         <div class="desc">有 Token 就能直接调上传接口，不用登录、不用带 CSRF；万一泄露，改这里或清空即可立刻失效。</div>
-        <pre class="code-block">curl -X POST "<?= Http::esc(rtrim((string)$s['base_url'], '/') !== '' ? (string)$s['base_url'] : 'https://img.40404.cn') ?>/api/upload.php" \
+        <pre class="code-block">curl -X POST "<?= Http::esc(rtrim((string)$s['base_url'], '/') !== '' ? (string)$s['base_url'] : Http::baseUrl()) ?>/api/upload.php" \
   -H "X-API-Token: 你的Token" \
   -F "file=@photo.jpg" \
   -F "site=<?= Http::esc(Sites::defaultSlug()) ?>" \
