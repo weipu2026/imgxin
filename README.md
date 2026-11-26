@@ -225,6 +225,7 @@ location ~ \.php$ {
 - `alias` 指向 `storage/` 根目录，站点分目录由 URL 里的 `/{站点}/` 带出
 - 新增站点不需要改 Nginx
 - 后台「设置 → Nginx 防盗链片段」会根据白名单生成同款配置
+- 这段防盗链只在**没有 CDN** 时有效。接了 EdgeOne 之类的 CDN 后请求命中缓存就不回源，必须把防盗链放到 CDN 侧（见上文「接入 EdgeOne」）
 
 保存后 `nginx -t && systemctl reload nginx`。
 
@@ -250,16 +251,87 @@ curl -I "https://img.example.com/i/default/202611/xxxxxxxxxxxxxxxx.webp"
 
 ---
 
-## 接入 EdgeOne
+## 接入 EdgeOne（主站与直链分离）
 
-- 加速域名使用 `img.example.com`，或另开 `cdn.example.com` 并把 `base_url` 改成它。
-- 缓存规则：`/i/` 前缀，缓存 TTL 30 天以上，**忽略查询参数**。
-- 回源协议 HTTPS，回源 Host 填写 `img.example.com`。
-- 防盗链：在 EdgeOne 的访问管控里配置 Referer 白名单 `*.example.com`，并放行空 Referer。
-- 不要开启「图片压缩 / 格式转换」类功能，避免边缘二次转码影响画质。
+推荐拓扑：**主站只做管理，直链域名只做分发**。
+
+| 角色 | 域名 | 走不走 CDN | 用途 |
+| --- | --- | --- | --- |
+| 主站 | `img.example.com` | 否 | 登录、上传、后台 |
+| 直链 | `cdn.example.com` | 是（EdgeOne） | 只承接 `/i/` 图片 |
+
+设置页把 `base_url` 填成 `https://cdn.example.com`。这一步必须最先做：留空时程序会用"当前访问域名"拼直链，从主站上传就会生成主站链接，CDN 完全没被用上。
+
+### 1. 主站 `/i/` 改为 301
+
+老链接仍然指向主站，用 301 平滑迁移，不要直接 403（否则历史文章里的图会全部裂）：
+
+```nginx
+location ^~ /i/ {
+    return 301 https://cdn.example.com$request_uri;
+}
+```
+
+301 只是让浏览器换地址，图片字节不会经过主站。浏览器缓存的 301 之后，后续请求直接打到 CDN，不再经过主站。
+
+### 2. 源站加一个只服务回源的站点
+
+EdgeOne 回源配置：**源站地址填服务器 IP、回源 HOST 填 `cdn.example.com`、回源协议选 HTTP**。
+
+回源 HOST 只是请求头，EO 直连 IP、不解析这个域名，所以不会循环。只有把"源站地址"填成 `cdn.example.com` 才会真正循环。
+
+源站需要单独的 server 块，只放 `/i/`：
+
+```nginx
+server {
+    listen 80;
+    server_name cdn.example.com;
+
+    location ^~ /i/ {
+        alias /www/wwwroot/img.example.com/storage/;
+        add_header Cache-Control "public, max-age=2592000, immutable" always;
+        add_header X-Content-Type-Options nosniff always;
+        access_log off;
+    }
+
+    location / { return 404; }
+}
+```
+
+三个要点：
+
+- **只监听 80，不要开强制 HTTPS**。回源走 HTTP 时，如果这个站点把 80 跳 443，EO 会拿到 301 跳回自己的加速域名，回源直接失效。
+- **只放 `/i/`，其余 404**。否则 `cdn.example.com/api/upload.php` 通过 CDN 也能摸到后台接口。
+- `root` 可以不写，`alias` 不依赖 root。
+
+### 3. 缓存
+
+- 规则：`/i/` 前缀，TTL 30 天，**忽略查询参数**（否则带 `?v=` 的请求全部 MISS）。
+- 源站只发一条 `Cache-Control`。`expires 30d` 和 `add_header Cache-Control` 同时写会输出两条头，边缘和浏览器取值不确定。
+- 不要开启「图片压缩 / 格式转换」，避免边缘二次转码影响画质。
+
+### 4. 防盗链
+
+- 用 EdgeOne「访问控制 → Referer 防盗链」，白名单按**域名**填（`*.example.com`），并勾选**允许空 Referer**。
+- 不要用"Referer 不等于 [...]"这类整串精确比较的自定义规则：真实浏览器发的是 `https://blog.com/post/1`，永远"不等于"列表里的 `blog.com`，结果把自己的图也拦了。
+- 防盗链必须在 EO 侧生效。只靠源站 nginx 的 `valid_referers` 时，命中缓存的请求不回源，等于没设。
+- **301 不影响防盗链**：跳转后浏览器对 CDN 发起的是新请求，Referer 仍是原博客页面，EO 照常判断。空 Referer 会走放行分支，所以直接打开、微信预览都正常。
+
+### 5. 边缘 HTTPS 证书
+
+- EO 免费证书（TrustAsia DV）自动签发、90 天自动续期，不需要手动部署；回源走 HTTP 时，源站也不必为 `cdn.example.com` 配证书。
+- 浏览器提示"连接不是私密连接"时，先查 **DNS** 而不是证书：如果解析到一个只装了主站证书的旧节点，SNI 对不上就会握手失败。DNS 里只保留一条 `CNAME → 你的加速域名.eo.dnse0.com`，删掉以前接其他 CDN 时留下的按线路解析。
+- 该站点如有「HTTP → HTTPS 跳转」开关，建议打开；找不到开关时可用规则引擎：`scheme = http` → `301 https://${host}${uri}`。
+
+### 6. 删图与边缘缓存
+
+删除或替换图片后，边缘缓存仍会按 TTL 继续命中，最长 30 天——后台删了、外面还能打开。需要立即生效就去 EO 刷新对应 URL；个人站更省事的做法是把 TTL 调到 7 天。
+
+### 7. 备案与其他
+
 - 加速区域包含中国大陆时，域名必须完成 ICP 备案；源站是腾讯云机器时还要完成腾讯云接入备案。
-- 换 `base_url` 后，新生成的链接会使用新域名；旧直链本身不会自动改变。
-- 如果源站前面还有可信反代/CDN，并且源站不能被公网直连，可在 `config.php` 把 `trusted_proxy` 设为 `true`；否则保持 `false`，避免伪造 `X-Forwarded-Proto`。
+- 换 `base_url` 后，新生成的链接使用新域名；已经发出去的老直链不会自动改，靠主站 301 兜底。
+- 源站前面如果有可信反代/CDN 且源站不能被公网直连，可在 `config.php` 把 `trusted_proxy` 设为 `true`；否则保持 `false`，避免伪造 `X-Forwarded-Proto`。
 
 ---
 
@@ -433,7 +505,26 @@ systemctl restart php8.5-fpm
 
 ### 删图后还能访问
 
-EdgeOne 边缘缓存可能仍然存在。提交 URL 或目录刷新，或等待 TTL 过期。
+程序已经把文件挪进回收站、直链立即失效，此时还能打开只可能是 **CDN 边缘缓存**没清。按 TTL 最长会残留 30 天。
+
+处理：EO 控制台提交该 URL 刷新；或把缓存 TTL 调短（7 天对个人站足够）。
+
+### 打开图片提示「连接不是私密连接」
+
+先看 DNS，不要先怀疑证书：
+
+- 该域名是否解析到了只装了主站证书的旧节点（SNI 对不上会直接握手失败）？
+- DNS 记录里是否还留着以前接其他 CDN 时的按线路解析？
+
+用公共 DNS 交叉验证：`nslookup 域名 223.5.5.5`。公共 DNS 正常、本机异常时，多半是本机/路由器的 DNS 缓存，`ipconfig /flushdns` 或临时换 DNS 即可。
+
+### 主站 301 之后，博客里的图还能打开吗
+
+能。301 会把老链接带到 CDN 同一路径；防盗链判断的是博客页面发来的 Referer，跟这次跳转无关，所以白名单里的站照常显示，盗链依旧 403。
+
+### 主站 `/i/` 改 301 后，后台缩略图为什么多了一跳
+
+管理页缩略图用的是 `base_url`。`base_url` 已经指向 CDN 时不会有这一跳；如果还是空的（用的是当前域名），缩略图会先 301 到 CDN。功能不受影响，但建议先把 `base_url` 填好再改主站 301。
 
 ### 首次访问不是初始化页
 
@@ -443,6 +534,23 @@ EdgeOne 边缘缓存可能仍然存在。提交 URL 或目录刷新，或等待 
 - `config.php` 的 `admin_hash`。
 
 如果想重新初始化，备份设置文件后，把这两处哈希都清空，再访问首页。已有图片和设置不会被删除。
+
+---
+
+## 已知限制与可选增强
+
+这些不是 bug，是为了保持"轻量、无数据库"而有意留白的部分，按需再补。
+
+| 现状 | 影响 | 可选增强 |
+| --- | --- | --- |
+| 删除图片后不会自动清 CDN 缓存 | 边缘按 TTL 继续命中，最长 30 天 | 接 EO 刷新 API，或加一个删除后的 purge webhook；更简单的做法是把 TTL 调到 7 天 |
+| 限流计数按 IP 存文件，只在命中时清理 | 长期无人访问的 IP 文件会残留，量大会上万个 inode | 在启动时按 1% 概率顺手清理超过窗口 6 倍的文件 |
+| `data/tmp` 只在正常流程里删临时文件 | 进程被杀会残留转码临时文件 | 每次上传时清理 1 小时前的 `data/tmp` 文件 |
+| 站点标识写进直链，不支持改名 | 改名等于旧链接全断 | 如确需改名，自己加一条旧路径 rewrite，或干脆新建站点重新上传 |
+| 无内置备份、无容量与证书告警 | 磁盘写满或证书到期只能靠人发现 | 宝塔计划任务每日打包 `storage/`、`data/` 到对象存储；配一个磁盘水位提醒 |
+| 上传限流只有"每 IP 每小时张数" | Token 泄漏后可被持续刷盘 | 增加每日总量或每 Token 配额 |
+| 不记录操作日志 | 被盗用后无法回溯 | 只记登录 IP、删除动作即可，不必做统计报表 |
+| 源站 `/i/` 只能靠 CDN 规则保护 | 拿到源站 IP + 伪造 Host 可直连取图 | EO 回源配置里加 `X-Origin-Token`，nginx 校验该头；或按 EO 回源 IP 段做 allow/deny |
 
 ---
 

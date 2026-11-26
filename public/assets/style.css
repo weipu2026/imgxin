@@ -26,7 +26,7 @@
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; scrollbar-gutter: stable; }
 body {
   margin: 0;
   min-width: 320px;
@@ -44,15 +44,12 @@ code, pre, kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, mon
 code { padding: 1px 5px; border-radius: 5px; background: #f0f2f6; color: #455166; font-size: .92em; }
 ::selection { background: #dce6ff; }
 
+/* 四个页面共用同一内容宽度，切换导航时版心不跳动 */
 .wrap {
-  width: min(calc(100% - 36px), var(--wrap, 1160px));
+  width: min(calc(100% - 36px), 1120px);
   margin: 0 auto;
   padding: 24px 0 64px;
 }
-.page-upload .wrap { --wrap: 900px; }
-.page-admin .wrap { --wrap: 1180px; }
-.page-trash .wrap { --wrap: 1020px; }
-.page-settings .wrap { --wrap: 840px; }
 
 /* ---------- 顶部导航 ---------- */
 .topbar {
