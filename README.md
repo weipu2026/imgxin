@@ -15,11 +15,11 @@
 | 项目 | 要求 |
 | --- | --- |
 | 操作系统 | Linux，推荐 Debian / Ubuntu |
-| 部署方式 | **Docker（推荐）** 或 Nginx + PHP-FPM 手动部署 |
-| PHP | **8.1 及以上**，推荐 8.4 / 8.5（Docker 镜像已内置） |
+| Web 服务 | Nginx + PHP-FPM |
+| PHP | **8.1 及以上**，推荐 8.4 / 8.5 |
 | 数据库 | 不需要 |
 | 磁盘 | 至少数百 MB，图片占用取决于上传量 |
-| 权限 | PHP 可写 `storage/`、`data/`、`trash/`（Docker 自动处理） |
+| 权限 | PHP 可写 `storage/`、`data/`、`trash/`（`install.sh` 自动处理） |
 
 ### PHP 扩展
 
@@ -102,188 +102,90 @@ imgxin/
 │  └─ tmp/            # 转码临时文件
 ├─ nginx-img.conf     # 需要粘贴到宝塔的片段
 ├─ dev-server.php     # 本地预览用，线上不需要
-├─ Dockerfile         # Docker 镜像构建
-├─ docker-compose.yml # Docker 一键启动
-├─ docker/            # Docker 专用 nginx + supervisor 配置
+├─ install.sh         # 一键安装脚本（创建目录、权限、nginx 配置）
 └─ README.md
 ```
 
 ---
 
-## Docker 一键部署（推荐）
+## 快速安装
 
-不想手动配 nginx、PHP 扩展和目录权限的话，用 Docker 最省事。目录创建、权限、nginx 配置、PHP 扩展全在镜像里，升级就是拉新镜像重启，数据卷不动。
+三步搞定，脚本自动创建目录、设置权限、检查 PHP 扩展、生成 nginx 配置。
 
-### 首次部署
+### 1. 上传程序
 
-```bash
-# 1. 安装 Docker（如果还没装）
-curl -fsSL https://get.docker.com | sh
+把 `imgxin` 里的内容上传到网站根目录（比如 `/www/wwwroot/img.40404.cn/`），结构是：
 
-# 2. 克隆或解压项目到目录
-git clone https://github.com/weipu2026/imgxin.git
-cd imgxin
-
-# 3. 构建并启动（首次会自动编译 PHP 扩展，约 3-5 分钟）
-docker compose up -d --build
-
-# 4. 浏览器访问完成密码初始化
-#    http://服务器IP:8080
+```text
+img.40404.cn/
+├─ public/          # 站点入口（nginx root 指向这里）
+├─ lib/             # 核心类
+├─ storage/         # 图片实体（脚本自动创建）
+├─ trash/           # 回收站（脚本自动创建）
+├─ data/            # 元数据、设置、限流（脚本自动创建）
+├─ config.php       # 固定配置
+├─ install.sh       # 一键安装脚本
+└─ README.md
 ```
 
-启动后 nginx 监听 8080 端口，浏览器打开完成首次密码设置，然后进设置页填直链域名和防盗链白名单。
+### 2. 运行安装脚本
+
+```bash
+cd /www/wwwroot/img.40404.cn
+sudo bash install.sh
+```
+
+脚本会：
+- 检查 PHP 版本和扩展（缺什么会告诉你装什么）
+- 创建 `storage/`、`data/{meta,trash,rate,tmp}`、`trash/` 目录
+- 设置目录权限（自动检测宝塔 `www` 或 Debian `www-data`）
+- 提示输入域名，自动生成 nginx 配置文件
+- 输出 nginx 重载命令
+
+按提示执行 `nginx -t && systemctl reload nginx` 即可。
+
+### 3. 浏览器初始化
+
+打开 `https://img.40404.cn/`，首次访问进入密码初始化页面：
+
+1. 输入管理员密码（至少 8 位）
+2. 确认密码
+3. 点击「设置密码并进入」
+
+自动登录后进设置页填直链域名、防盗链白名单、磁盘配额等。
 
 ### 升级
 
 ```bash
-git pull                          # 拉最新代码
-docker compose up -d --build       # 重建镜像并重启
+git pull          # 或重新上传覆盖代码
+bash install.sh    # 脚本幂等，重复跑无副作用
 ```
 
-数据在 volume 里（`./data`、`./storage`、`./trash`），重建镜像不会丢。应用内置版本迁移系统，重启后自动比对代码版本和数据版本，有新迁移就自动执行。
-
-### 反向代理到 80 端口
-
-如果前面还有一层 nginx/CDN（比如 EdgeOne），把 8080 端口代理到容器即可，容器内 nginx 监听 80：
-
-```nginx
-location / {
-    proxy_pass http://127.0.0.1:8080;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}
-```
+应用内置版本迁移系统，访问后台时会自动检测代码版本与数据版本，有新迁移就自动执行。
 
 ---
 
-## 安装步骤（宝塔 / Debian）
+## 手动配置（可选）
 
-不想用 Docker 的话，按下面手动步骤来。下面以域名 `img.40404.cn`、站点目录 `/www/wwwroot/img.40404.cn` 为例。实际部署时替换成自己的域名和路径。
+`install.sh` 没覆盖到的场景（宝塔自定义路径、特殊 PHP 版本）参考以下内容。
 
-### 1. 上传程序
+### PHP 扩展
 
-把 `imgxin` 里的内容上传到 `/www/wwwroot/img.40404.cn/`，最终结构是：
-
-```text
-/www/wwwroot/img.40404.cn/
-├─ public/
-├─ lib/
-├─ storage/
-├─ trash/
-├─ data/
-├─ config.php
-├─ dev-server.php
-└─ README.md
-```
-
-注意：`public`、`lib`、`storage`、`data` 与 `config.php` 必须平级，不要在站点根里再套一层 `imgxin`。
-
-### 2. 新建站点
-
-在宝塔中：
-
-1. 添加站点，域名填写 `img.40404.cn`。
-2. 如需，把 `www.img.40404.cn` 也绑定并做 301 跳转。
-3. PHP 版本选择 8.4 或 8.5。
-4. 站点根目录保持 `/www/wwwroot/img.40404.cn`。
-5. 在「网站目录」中把**运行目录**设为 `/public`。
-6. 申请 Let's Encrypt 证书并开启强制 HTTPS。
-
-### 3. 安装 PHP 扩展
-
-#### 方式 A：Debian / Ubuntu 的 apt 版本 PHP
-
-如果 PHP 8.5 是通过 apt 或 sury 源安装的：
+必需：`fileinfo`、`mbstring`、`gd`、`json`、`session`、`hash`。推荐 Imagick（支持 AVIF 输出）。
 
 ```bash
-apt update
-apt install -y \
-  php8.5-cli \
-  php8.5-fpm \
-  php8.5-common \
-  php8.5-mbstring \
-  php8.5-gd \
-  imagemagick \
-  libmagickwand-dev
+# Debian / Ubuntu
+apt install -y php8.5-cli php8.5-fpm php8.5-mbstring php8.5-gd php8.5-imagick
 
-# 推荐再装 Imagick
-apt install -y php8.5-imagick
-
-systemctl restart php8.5-fpm
+# 验证
+php -m | grep -Ei 'fileinfo|mbstring|gd|imagick'
 ```
 
-如果 `php8.5-imagick` 找不到，先确认已经添加 sury 源，或者使用 `pecl install imagick`。
+宝塔面板：软件商店 → PHP 8.5 → 设置 → 安装扩展。
 
-#### 方式 B：宝塔自己编译的 PHP
+### PHP 上传限制
 
-如果 PHP 是宝塔面板编译安装的：
-
-1. 到「软件商店 → PHP 8.5 → 设置 → 安装扩展」。
-2. 安装 `fileinfo`、`mbstring`、`gd`。
-3. Imagick 如果面板里没有，可使用宝塔终端执行 `pecl install imagick`，然后在 PHP 配置中启用。
-4. 修改完成后重启 PHP-FPM。
-
-#### 验证扩展
-
-在宝塔终端或 SSH 执行：
-
-```bash
-php -m | grep -Ei 'fileinfo|mbstring|gd|imagick|json|session|hash'
-
-# Imagick 应输出 true
-php -r 'var_dump(in_array("WEBP", Imagick::queryFormats("WEBP")));'
-
-# 如果准备使用 AVIF，也应输出 true
-php -r 'var_dump(in_array("AVIF", Imagick::queryFormats("AVIF")));'
-```
-
-如果使用 GD：
-
-```bash
-php -r 'var_dump(function_exists("imagewebp"));'   # 应为 true
-php -r 'var_dump(function_exists("imageavif"));'   # true 才支持 GD 输出 AVIF
-```
-
-### 4. 创建目录并设置权限
-
-```bash
-cd /www/wwwroot/img.40404.cn
-
-mkdir -p storage trash data/meta data/trash data/rate data/tmp
-
-# 宝塔默认 PHP 和 Nginx 用户都是 www
-chown -R www:www storage trash data
-
-# 图片目录需要被 Nginx 读取
-find storage -type d -exec chmod 755 {} \;
-find storage -type f -exec chmod 644 {} \;
-
-# 数据目录只允许所有者写入
-chmod -R 750 data trash
-find data trash -type f -exec chmod 640 {} \;
-
-# 固定配置不要被 Web 直接访问
-chmod 640 config.php
-```
-
-如果 `data/settings.json` 已存在，也确保它属于 `www:www` 且权限为 `640`：
-
-```bash
-chown www:www data/settings.json 2>/dev/null || true
-chmod 640 data/settings.json 2>/dev/null || true
-```
-
-`storage` 必须可写，但里面只会保存重新编码后的图片，文件名由哈希生成，不会出现可执行的 PHP 文件。
-
-### 5. 调整 PHP 上传限制
-
-宝塔路径：
-
-「软件商店 → PHP 8.5 → 设置 → 性能调整」
-
-建议值：
+`php.ini` 或宝塔「性能调整」：
 
 ```ini
 upload_max_filesize = 25M
@@ -292,120 +194,59 @@ memory_limit = 256M
 max_execution_time = 60
 ```
 
-保存后重启 PHP-FPM。也可以在「设置 → 运行环境」里确认实际生效值。
+### Nginx 配置
 
-### 6. 配置 Nginx 图片直链
-
-打开 `nginx-img.conf`，把 `/www/wwwroot/YOUR_SITE` 替换成实际站点目录，然后粘贴到：
-
-「网站 → img.40404.cn → 设置 → 配置文件」的 `server {}` 内。
-
-核心配置如下：
+站点 `server {}` 内添加：
 
 ```nginx
-# 如果后台单张上限超过 25MB，同步调大
-client_max_body_size 30m;
+client_max_body_size 25m;
 
+# 图片直链：nginx 直接吐静态文件，不经 PHP
 location ^~ /i/ {
     alias /www/wwwroot/img.40404.cn/storage/;
     autoindex off;
     add_header Cache-Control "public, max-age=31536000, immutable";
     add_header X-Content-Type-Options nosniff;
-    add_header Access-Control-Allow-Origin "*";
 
-    # none 表示允许空 Referer；不需要放行空 Referer 时删掉 none
+    # 防盗链：none 放行空 Referer（微信/QQ 直接打开不发 Referer）
     valid_referers none blocked server_names *.40404.cn;
     if ($invalid_referer) { return 403; }
+}
+
+# PHP 入口
+location ~ \.php$ {
+    fastcgi_pass unix:/run/php/php8.5-fpm.sock;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    include fastcgi_params;
 }
 ```
 
 关键点：
+- `alias` 指向 `storage/` 根目录，站点分目录由 URL 里的 `/{站点}/` 带出
+- 新增站点不需要改 Nginx
+- 后台「设置 → Nginx 防盗链片段」会根据白名单生成同款配置
 
-- `alias` 指向 `storage/` 的**根**即可，站点这一层目录由 URL 里的 `/{站点}/` 自然带出来。
-- 以后新增站点不需要修改 Nginx。
-- 防盗链白名单以你实际博客域名为准，例如 `*.40404.cn`。
-- 后台「设置 → Nginx 防盗链片段」会根据当前白名单生成同款配置，改完白名单后可直接覆盖这一段。
+保存后 `nginx -t && systemctl reload nginx`。
 
-保存后重载 Nginx：
-
-```bash
-nginx -t && systemctl reload nginx
-```
-
-### 7. 初始化管理员密码
-
-浏览器访问：
-
-```text
-https://img.40404.cn/
-```
-
-首次运行时，`config.php` 的 `admin_hash` 默认为空，因此会直接进入初始化页面：
-
-1. 输入管理员密码，至少 8 位。
-2. 再次输入确认。
-3. 点击「设置密码并进入」。
-
-设置成功后：
-
-- 自动登录并进入上传页。
-- 密码哈希写入 `data/settings.json`。
-- 初始化入口自动关闭，以后正常登录。
-
-如果希望完全用命令行配置，也可以手动生成哈希：
+### 目录权限
 
 ```bash
-php -r "echo password_hash('换成你的密码', PASSWORD_DEFAULT), PHP_EOL;"
+chown -R www:www storage trash data
+find storage -type d -exec chmod 755 {} \;
+find storage -type f -exec chmod 644 {} \;
+chmod -R 750 data trash
+chmod 640 config.php
 ```
 
-把输出整串（形如 `$2y$12$...`）填入 `config.php` 的 `admin_hash`，注意用单引号包裹，避免 shell 展开 `$`。启动后也可以在设置页改密码，后台保存的哈希优先于 `config.php`。
+### 验证
 
-### 8. 配置后台参数
-
-登录后进入：
-
-```text
-https://img.40404.cn/settings.php
-```
-
-建议至少确认：
-
-- **直链域名**：填写 `https://img.40404.cn`；留空则自动使用当前访问域名。
-- **输出格式**：默认 `webp`。
-- **质量**：默认 84。
-- **最长边上限**：默认 2560px。
-- **单张大小上限**：默认 20 MB，不要超过 PHP 和 Nginx 的限制。
-- **防盗链白名单**：填写实际博客域名，例如 `*.40404.cn`。
-- **回收站保留天数**：默认 30 天。
-- **磁盘配额保护线（GB）**：默认 0（不限制）。设为 N 后，磁盘剩余空间低于 N GB 时上传直接被拒，宁可拒传也不让转码写到一半失败。
-- **API Token**：只有需要脚本或编辑器免登录上传时才生成。
-
-### 9. 验证安装
-
-1. 上传一张 JPG 或 PNG。
-2. 确认返回的直链可以打开，格式为 WebP。
-3. 复制直链并执行：
+上传一张图，确认直链可打开：
 
 ```bash
 curl -I "https://img.40404.cn/i/default/202611/xxxxxxxxxxxxxxxx.webp"
 ```
 
-正常应返回：
-
-```text
-HTTP/2 200
-content-type: image/webp
-cache-control: public, max-age=31536000, immutable
-x-content-type-options: nosniff
-```
-
-如果返回 404，优先检查：
-
-- Nginx 的 `alias` 路径和结尾斜杠。
-- `storage/{站点}/{月份}/` 中是否真的有文件。
-- Nginx 是否已经 reload。
-
-设置页底部的「直链自检」也会真实请求一张现有图片，用来验证 `/i/` 链路。
+正常应返回 `HTTP/2 200` + `content-type: image/webp`。设置页底部的「直链自检」也会真实请求一张现有图片。
 
 ---
 
