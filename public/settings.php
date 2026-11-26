@@ -467,7 +467,7 @@ $warnMem = $memBytes > 0 && $memBytes < 256 * 1024 * 1024;
             <span class="muted">还没有图片，传一张后再看</span>
           <?php else: ?>
             <button type="button" class="btn btn-sm" id="probeBtn">测一张现有图片</button>
-            <span id="probeOut" class="hint">用浏览器真实请求一次 /i/，验证 nginx alias 是否配对了</span>
+            <span id="probeOut" class="hint">由服务器发起 HEAD 请求，验证直链和回源链路是否通</span>
           <?php endif; ?>
         </div>
       </div>
@@ -507,22 +507,23 @@ $warnMem = $memBytes > 0 && $memBytes < 256 * 1024 * 1024;
 (function () {
   const btn = document.getElementById('probeBtn');
   const out = document.getElementById('probeOut');
-  const url = <?= json_encode($env['probe'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  // 交给服务端去 HEAD：后台和直链往往不同域，浏览器 fetch 会被 CORS 拦，图片却能正常显示
   btn.addEventListener('click', async function () {
     btn.disabled = true;
-    out.textContent = '请求中…';
+    out.textContent = '检测中…';
     out.style.color = 'var(--muted)';
     try {
-      const r = await fetch(url, { method: 'HEAD', cache: 'no-store' });
-      if (r.ok) {
-        out.textContent = '200 OK · ' + (r.headers.get('content-type') || '');
+      const r = await fetch('api/probe.php', { cache: 'no-store' });
+      const j = await r.json();
+      if (j.ok) {
+        out.textContent = '200 OK · ' + (j.type || '') + (j.final && j.final !== j.url ? ' · 经跳转 ' + j.final : '');
         out.style.color = 'var(--success)';
       } else {
-        out.textContent = r.status + ' · 直链打不开，检查 alias 路径与文件是否存在';
+        out.textContent = (j.status ? j.status + ' · ' : '') + (j.hint || j.error || '直链打不开');
         out.style.color = 'var(--danger)';
       }
     } catch (e) {
-      out.textContent = '请求失败：' + e.message;
+      out.textContent = '自检接口调用失败：' + e.message;
       out.style.color = 'var(--danger)';
     } finally {
       btn.disabled = false;

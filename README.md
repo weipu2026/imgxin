@@ -328,6 +328,7 @@ server {
 - 不要用"Referer 不等于 [...]"这类整串精确比较的自定义规则：真实浏览器发的是 `https://blog.com/post/1`，永远"不等于"列表里的 `blog.com`，结果把自己的图也拦了。
 - 防盗链必须在 EO 侧生效。只靠源站 nginx 的 `valid_referers` 时，命中缓存的请求不回源，等于没设。
 - **301 不影响防盗链**：跳转后浏览器对 CDN 发起的是新请求，Referer 仍是原博客页面，EO 照常判断。空 Referer 会走放行分支，所以直接打开、微信预览都正常。
+- **设置页「直链自检」为什么用服务器探测**：后台在 `img.example.com`、直链在 `cdn.example.com` 时属于跨域，浏览器 `fetch` 读响应需要 CORS 头，缺了就是 `Failed to fetch`，而 `<img>` 加载图片本来就不受这个限制。现在自检由 PHP 在服务器上发 HEAD，返回真实状态码和原因；本地 `php -S` 预览会自己请求自己超时，线上 nginx 不存在这个问题。
 
 ### 5. 边缘 HTTPS 证书
 
