@@ -225,7 +225,16 @@ $warnMem = $memBytes > 0 && $memBytes < 256 * 1024 * 1024;
         </div>
         <div class="field">
           <label>数据版本</label>
-          <div class="env-value"><?= Http::esc(Upgrade::storedVersion() === '0.0.0' ? '尚未初始化' : Upgrade::storedVersion()) ?></div>
+          <div class="env-value"><?php
+            $storedRaw = Upgrade::storedVersion();
+            if ($storedRaw === '0.0.0') {
+                echo '尚未初始化';
+            } elseif (!$pendingUpgrade && !$downgrade) {
+                echo Http::esc($storedRaw) . '（无待迁移项）';
+            } else {
+                echo Http::esc($storedRaw);
+            }
+          ?></div>
         </div>
       </div>
 
@@ -240,7 +249,7 @@ $warnMem = $memBytes > 0 && $memBytes < 256 * 1024 * 1024;
       <?php elseif ($downgrade): ?>
         <div class="alert alert-error">当前数据版本高于代码版本，可能是降级覆盖。请先备份 data/，再恢复对应版本代码。</div>
       <?php else: ?>
-        <div class="desc">当前已是最新版本。升级时只需覆盖 public/、lib/、config.php（如未改过固定项）和 README，再回到这里点升级。</div>
+        <div class="desc">当前代码没有包含数据结构变更，无需迁移，也没有升级按钮。数据版本只在真正执行迁移时推进，所以它可以低于代码版本，这是正常状态。</div>
       <?php endif; ?>
     </div>
   </section>
