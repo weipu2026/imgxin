@@ -172,4 +172,84 @@ final class Sites
 
         return 'ok';
     }
+
+    /**
+     * 扫描图片库与回收站里存在、但站点列表中没有登记的目录。
+     * 覆盖更新或误删 data/sites.json 后，图片仍躺在磁盘上，用这里找回。
+     *
+     * @return array<int, array{slug:string, files:int, trash:int, months:int}>
+     */
+    public static function orphans(): array
+    {
+        $known = [];
+        foreach (self::all() as $site) {
+            $known[$site['slug']] = true;
+        }
+
+        $roots = [
+            'storage' => (string)Config::base('storage_dir'),
+            'trash'   => (string)Config::base('trash_dir'),
+        ];
+
+        $found = [];
+        foreach ($roots as $kind => $root) {
+            if (!is_dir($root)) {
+                continue;
+            }
+            foreach (glob($root . '/*', GLOB_ONLYDIR) ?: [] as $dir) {
+                $slug = basename($dir);
+                if (!self::slugOk($slug) || isset($known[$slug])) {
+                    continue;
+                }
+                if (!isset($found[$slug])) {
+                    $found[$slug] = ['slug' => $slug, 'files' => 0, 'trash' => 0, 'months' => 0];
+                }
+
+                $months = glob($dir . '/*', GLOB_ONLYDIR) ?: [];
+                if (count($months) > $found[$slug]['months']) {
+                    $found[$slug]['months'] = count($months);
+                }
+
+                $files = 0;
+                foreach ($months as $monthDir) {
+                    foreach (glob($monthDir . '/*') ?: [] as $f) {
+                        if (is_file($f)) {
+                            $files++;
+                        }
+                    }
+                }
+                $found[$slug][$kind === 'storage' ? 'files' : 'trash'] = $files;
+            }
+        }
+
+        ksort($found);
+
+        return array_values(array_filter($found, static fn(array $o): bool => $o['files'] + $o['trash'] > 0));
+    }
+
+    /** 把磁盘上已有的站点目录登记回 sites.json，不移动、不改名任何文件 */
+    public static function adopt(string $slug, string $name = ''): array
+    {
+        $slug = strtolower(trim($slug));
+        if (!self::slugOk($slug)) {
+            throw new RuntimeException('站点标识「' . $slug . '」不合法');
+        }
+        if (self::exists($slug)) {
+            throw new RuntimeException('站点标识「' . $slug . '」已经登记过了');
+        }
+
+        $name = trim($name);
+        if ($name === '') {
+            $name = $slug . '（已恢复）';
+        }
+        if (mb_strlen($name) > 30) {
+            $name = mb_substr($name, 0, 30);
+        }
+
+        $list   = self::all();
+        $list[] = ['slug' => $slug, 'name' => $name, 'created_at' => date('Y-m-d H:i:s')];
+        self::save($list);
+
+        return ['slug' => $slug, 'name' => $name];
+    }
 }

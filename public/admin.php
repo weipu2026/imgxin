@@ -25,6 +25,7 @@ $sites  = Sites::all();
 Store::purgeExpired(max(1, (int)Config::get('trash_keep_days', 30)));
 
 $cap    = Store::capacity();
+$orphans = Sites::orphans();
 
 // 一致性检查是只读操作，用 GET 参数触发即可，不必走 CSRF
 $consistency = null;
@@ -164,6 +165,19 @@ $siteName = static function (string $slug) use ($sites): string {
       <h2>站点分布</h2>
       <span class="hint"><?= count($sites) ?> 个站点</span>
     </div>
+    <?php if ($orphans): ?>
+      <div class="alert alert-warning orphan-sites">
+        <div>
+          <b>检测到 <?= count($orphans) ?> 个未登记的站点目录</b>
+          —— 磁盘上有图，但站点列表里没有：
+          <?php foreach ($orphans as $o): ?>
+            <code><?= Http::esc($o['slug']) ?></code><span class="hint"><?= (int)$o['files'] ?> 张<?= (int)$o['trash'] > 0 ? '，回收站 ' . (int)$o['trash'] . ' 张' : '' ?></span>
+          <?php endforeach; ?>
+          <div class="desc">通常是覆盖更新或误删 data/sites.json 造成的。登记后会沿用原目录，图片和直链都不变。</div>
+        </div>
+        <button type="button" class="btn btn-sm btn-primary" id="adoptSites">一键登记</button>
+      </div>
+    <?php endif; ?>
     <div class="site-list">
       <?php foreach ($cap['sites'] as $s): ?>
         <?php $pct = $cap['total_bytes'] > 0 ? round($s['bytes'] / $cap['total_bytes'] * 100) : 0; ?>
@@ -414,6 +428,25 @@ document.querySelectorAll('.rmSite').forEach(b => b.addEventListener('click', as
   if (j.ok) { toast('已删除'); setTimeout(() => location.reload(), 700); }
   else { toast(j.error || '删除失败'); }
 }));
+// 登记孤儿站点目录
+const adoptBtn = document.getElementById('adoptSites');
+if (adoptBtn) adoptBtn.addEventListener('click', async () => {
+  if (!confirm('把检测到的目录登记回站点列表？只写配置，不动磁盘上的图片。')) return;
+  adoptBtn.disabled = true;
+  const fd = new FormData();
+  fd.append('action', 'adopt');
+  fd.append('csrf', CSRF);
+  try {
+    const r = await fetch('api/sites.php', { method: 'POST', body: fd, headers: { 'X-CSRF-Token': CSRF } });
+    const j = await r.json();
+    if (!j.ok) { toast(j.error || '登记失败'); adoptBtn.disabled = false; return; }
+    toast(j.message || '已登记');
+    setTimeout(() => location.reload(), 800);
+  } catch (e) {
+    toast('登记失败：' + e.message);
+    adoptBtn.disabled = false;
+  }
+});
 </script>
 </body>
 </html>

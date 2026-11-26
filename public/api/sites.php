@@ -39,4 +39,33 @@ if ($action === 'remove') {
     Http::json(['ok' => $r === 'ok', 'error' => $r === 'ok' ? null : $map[$r]]);
 }
 
+if ($action === 'adopt') {
+    $slug = strtolower(trim((string)($_POST['slug'] ?? '')));
+    try {
+        if ($slug === '') {
+            $added = [];
+            foreach (Sites::orphans() as $o) {
+                try {
+                    $added[] = Sites::adopt($o['slug']);
+                } catch (Throwable $e) {
+                    // 已登记或名称冲突就跳过，继续处理下一个
+                }
+            }
+            Http::json([
+                'ok'      => true,
+                'count'   => count($added),
+                'sites'   => $added,
+                'message' => $added === []
+                    ? '没有需要登记的站点目录'
+                    : '已登记 ' . count($added) . ' 个目录：' . implode('、', array_column($added, 'slug')),
+            ]);
+        }
+
+        $site = Sites::adopt($slug);
+        Http::json(['ok' => true, 'count' => 1, 'sites' => [$site], 'message' => '已登记站点「' . $site['name'] . '」']);
+    } catch (Throwable $e) {
+        Http::fail($e->getMessage());
+    }
+}
+
 Http::fail('未知操作');
