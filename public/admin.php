@@ -250,8 +250,9 @@ $siteName = static function (string $slug) use ($sites): string {
           </a>
           <div class="image-info">
             <div class="name" title="<?= Http::esc($it['original_name']) ?>"><?= Http::esc($it['original_name']) ?></div>
-            <div><span class="tag tag-blue"><?= Http::esc($siteName($it['site'])) ?></span><?= $it['width'] > 0 ? (int)$it['width'] . '×' . (int)$it['height'] : '—' ?> · <?= Http::esc(Http::bytes((int)$it['bytes'])) ?></div>
-            <div><?= Http::esc(substr($it['uploaded_at'], 5, 11)) ?></div>
+            <div class="meta-row"><span class="tag tag-blue"><?= Http::esc($siteName($it['site'])) ?></span></div>
+            <div class="meta-row"><?= $it['width'] > 0 ? (int)$it['width'] . '×' . (int)$it['height'] : '—' ?> <span class="dot">·</span> <?= Http::esc(Http::bytes((int)$it['bytes'])) ?></div>
+            <div class="meta-row"><?= Http::esc(substr($it['uploaded_at'], 5, 11)) ?></div>
             <div class="actions"><a href="<?= Http::esc($it['url']) ?>" target="_blank" rel="noopener">打开</a><a href="#" class="cp" data-url="<?= Http::esc($it['url']) ?>">直链</a><a href="#" class="cpMd" data-v="![图片](<?= Http::esc($it['url']) ?>)">MD</a></div>
           </div>
         </article>
