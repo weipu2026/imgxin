@@ -85,8 +85,26 @@ final class Sites
     /** 默认站点：列表里的第一个，用于没传 site 参数的接口 */
     public static function defaultSlug(): string
     {
+        $pref = (string)Config::get('default_site', '');
+        if ($pref !== '' && self::exists($pref)) {
+            return $pref;
+        }
+
         $all = self::all();
         return $all[0]['slug'];
+    }
+
+    /** 设定默认站点：上传接口不带 site、上传页初始选择都会用它 */
+    public static function setDefault(string $slug): string
+    {
+        $slug = strtolower(trim($slug));
+        if (!self::exists($slug)) {
+            throw new RuntimeException('站点不存在');
+        }
+
+        Config::save(['default_site' => $slug]);
+
+        return $slug;
     }
 
     public static function add(string $name, string $slug = ''): array
@@ -159,6 +177,11 @@ final class Sites
 
         $list = array_values(array_filter($list, static fn(array $s): bool => $s['slug'] !== $slug));
         self::save($list);
+
+        // 删掉的正好是默认站点时清空标记，回落到第一个站点
+        if ((string)Config::get('default_site', '') === $slug) {
+            Config::save(['default_site' => '']);
+        }
 
         if (is_dir($dir)) {
             @rmdir($dir);

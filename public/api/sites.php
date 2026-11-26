@@ -68,4 +68,14 @@ if ($action === 'adopt') {
     }
 }
 
+if ($action === 'default') {
+    $slug = strtolower(trim((string)($_POST['slug'] ?? '')));
+    try {
+        $slug = Sites::setDefault($slug);
+        Http::json(['ok' => true, 'slug' => $slug, 'message' => '已设为默认站点：' . $slug]);
+    } catch (Throwable $e) {
+        Http::fail($e->getMessage());
+    }
+}
+
 Http::fail('未知操作');

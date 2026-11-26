@@ -20,6 +20,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (string)($_POST['do'] ??
 
 $csrf   = Auth::csrf();
 $sites  = Sites::all();
+$defaultSlug = Sites::defaultSlug();
 
 // 不只依赖回收站页面触发清理；后台首页每次打开也顺手清掉过期文件。
 Store::purgeExpired(max(1, (int)Config::get('trash_keep_days', 30)));
@@ -186,6 +187,11 @@ $siteName = static function (string $slug) use ($sites): string {
           <div class="site-slug">/<?= Http::esc($s['slug']) ?></div>
           <div class="progress"><i style="width:<?= max(1, $pct) ?>%"></i></div>
           <div class="site-usage"><?= (int)$s['count'] ?> 张 · <?= Http::esc(Http::bytes((int)$s['bytes'])) ?></div>
+          <?php if ($s['slug'] === $defaultSlug): ?>
+            <span class="site-default-tag" title="上传页默认选中的站点">默认</span>
+          <?php else: ?>
+            <button type="button" class="btn btn-sm setDefault" data-slug="<?= Http::esc($s['slug']) ?>">设为默认</button>
+          <?php endif; ?>
           <?php if (count($sites) > 1): ?>
             <button type="button" class="btn btn-sm btn-danger rmSite" data-slug="<?= Http::esc($s['slug']) ?>" data-name="<?= Http::esc($s['name']) ?>">删除</button>
           <?php endif; ?>
@@ -428,6 +434,27 @@ document.querySelectorAll('.rmSite').forEach(b => b.addEventListener('click', as
   if (j.ok) { toast('已删除'); setTimeout(() => location.reload(), 700); }
   else { toast(j.error || '删除失败'); }
 }));
+// 设为默认站点
+document.querySelectorAll('.setDefault').forEach(b => b.addEventListener('click', async () => {
+  b.disabled = true;
+  const fd = new FormData();
+  fd.append('action', 'default');
+  fd.append('slug', b.dataset.slug);
+  fd.append('csrf', CSRF);
+  try {
+    const r = await fetch('api/sites.php', { method: 'POST', body: fd, headers: { 'X-CSRF-Token': CSRF } });
+    const j = await r.json();
+    if (!j.ok) { toast(j.error || '设置失败'); b.disabled = false; return; }
+    // 上传页会读这个 localStorage 记住上次选择，这里同步一下，避免还停在旧站点
+    try { localStorage.setItem('imgxin.site', b.dataset.slug); } catch (e) {}
+    toast(j.message || '已设为默认');
+    setTimeout(() => location.reload(), 700);
+  } catch (e) {
+    toast('设置失败：' + e.message);
+    b.disabled = false;
+  }
+}));
+
 // 登记孤儿站点目录
 const adoptBtn = document.getElementById('adoptSites');
 if (adoptBtn) adoptBtn.addEventListener('click', async () => {

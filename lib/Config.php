@@ -48,6 +48,8 @@ final class Config
             'api_token'           => '',
             // 回收站保留天数，超过自动彻底删除
             'trash_keep_days'     => 30,
+            // 默认站点标识：上传页初始选择、不带 site 的上传请求都落到它；空则用列表第一个
+            'default_site'        => '',
         ];
     }
 

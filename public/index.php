@@ -70,6 +70,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 $csrf   = Auth::csrf();
 $month  = Store::month();
 $sites  = $logged ? Sites::all() : [];
+$defaultSlug = $logged ? Sites::defaultSlug() : '';
 $cap    = $logged ? Store::capacity() : ['this_month' => 0, 'total_bytes' => 0, 'total_count' => 0];
 $outFmt = (string)Config::get('output', 'webp');
 $maxMb  = round(((int)Config::get('max_bytes', 20 * 1024 * 1024)) / 1048576, 1);
@@ -159,7 +160,7 @@ $boot   = [
       <label class="control-group" for="site">上传到
         <select id="site">
           <?php foreach ($sites as $s): ?>
-            <option value="<?= Http::esc($s['slug']) ?>"><?= Http::esc($s['name']) ?></option>
+            <option value="<?= Http::esc($s['slug']) ?>"<?= $s['slug'] === $defaultSlug ? ' selected' : '' ?>><?= Http::esc($s['name']) ?></option>
           <?php endforeach; ?>
         </select>
       </label>
