@@ -46,8 +46,13 @@ if (!Sites::exists($site)) {
 }
 
 // ---------- 限流 ----------
+// Token 上传（插件/脚本/Obsidian 等服务端调用）按 Token+站点限流，
+// 多个博客各自独立配额，互不挤占；浏览器直传仍按 IP。
 $limit = (int)Config::get('rate_per_hour', 60);
-if (!Rate::hit('upload:' . Http::ip(), $limit)) {
+$rateKey = $byToken
+    ? ('upload:token:' . md5($expected) . ':' . $site)
+    : ('upload:' . Http::ip());
+if (!Rate::hit($rateKey, $limit)) {
     Http::fail('上传太频繁了，休息一下再传', 429);
 }
 
