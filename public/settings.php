@@ -375,7 +375,7 @@ $warnMem = $memBytes > 0 && $memBytes < 256 * 1024 * 1024;
         </div>
         <div class="desc">有 Token 就能直接调上传接口，不用登录、不用带 CSRF；万一泄露，改这里或清空即可立刻失效。</div>
         <pre class="code-block">curl -X POST "<?= Http::esc(rtrim((string)$s['base_url'], '/') !== '' ? (string)$s['base_url'] : Http::baseUrl()) ?>/api/upload.php" \
-  -H "X-API-Token: 你的Token" \
+  -H "X-API-Token: <span id="tokExample">你的Token</span>" \
   -F "file=@photo.jpg" \
   -F "site=<?= Http::esc(Sites::defaultSlug()) ?>" \
   -F "quality=84"</pre>
@@ -532,14 +532,26 @@ $warnMem = $memBytes > 0 && $memBytes < 256 * 1024 * 1024;
 })();
 <?php endif; ?>
 
+const tokInput = document.getElementById('tok');
+const tokExample = document.getElementById('tokExample');
+
+// 示例里的 Token 跟着输入框实时变：有值就填真值，空着就显示占位文案
+function syncTokenExample() {
+  const v = tokInput.value.trim();
+  tokExample.textContent = v !== '' ? v : '你的Token';
+}
+tokInput.addEventListener('input', syncTokenExample);
+syncTokenExample();
+
 document.getElementById('genTok').addEventListener('click', function () {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
   let out = '';
   for (let i = 0; i < bytes.length; i++) { out += chars[bytes[i] % chars.length]; }
-  document.getElementById('tok').value = out;
+  tokInput.value = out;
   document.getElementById('clrTok').checked = false;
+  syncTokenExample();
 });
 </script>
 </body>

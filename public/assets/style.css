@@ -523,6 +523,7 @@ pre { margin: 0; padding: 14px 15px; overflow: auto; border: 1px solid #222a36; 
 .code-block { margin-top: 12px; }
 .token-row { display: flex; gap: 8px; align-items: center; }
 .token-row input { min-width: 0; }
+.token-row .btn { flex: 0 0 auto; white-space: nowrap; }
 
 /* ---------- Toast / 底部 ---------- */
 .toast {
