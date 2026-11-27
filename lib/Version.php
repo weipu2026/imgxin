@@ -10,5 +10,5 @@ declare(strict_types=1);
  */
 final class Version
 {
-    public const CODE_VERSION = '1.1.6';
+    public const CODE_VERSION = '1.2.0';
 }

@@ -443,7 +443,19 @@ curl -X POST "https://img.example.com/api/upload.php" \
 - 不要把 Token 放在表单或 URL 中，避免被日志记录。
 - `site` 不填落到默认站点；`quality` 可选 60–95。
 - 返回 JSON，包含 `url`、`markdown`、`html`。
-- Token 只给上传权限；删除、回收站、设置仍然需要登录态和 CSRF。
+
+Token 也可以调用删除接口（只移入回收站，不会硬删）：
+
+```bash
+curl -X POST "https://img.example.com/api/delete.php" \
+  -H "X-API-Token: 你的Token" \
+  --data-urlencode "url=https://imgcdn.example.com/i/cipba/202611/0a1b2c3d4e5f6071.webp"
+```
+
+- 参数给 `url`，或给 `site` + `id`（会自动按 id 反查月份）。
+- 删除一律进回收站，30 天内可在后台恢复；图床返回 404 表示图片已经不在。
+- Token 删除单独限流（默认每小时 120 次，`delete_per_hour`），与上传配额互不挤占。
+- 永久删除、清空回收站、改设置仍然需要登录态和 CSRF。
 - Token 泄露后，在设置页修改或清空即可立即失效。
 
 ---
@@ -474,7 +486,7 @@ curl -X POST "https://img.example.com/api/upload.php" \
 
 - 登录锁定：同一 IP 连续输错 5 次密码，锁定 15 分钟。
 - 上传限流：默认每 IP 每小时 60 张，可配置。
-- Token 只给上传权限。
+- Token 只给上传和删除（删除仅进回收站）权限，且删除单独限流。
 - 所有写操作校验 CSRF。
 - 后台页面带 CSP、`X-Frame-Options: DENY` 和 Referrer-Policy。
 - 默认不信任 `X-Forwarded-Proto`，只有确认反代可信时才开启 `trusted_proxy`。
